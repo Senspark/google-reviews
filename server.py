@@ -23,6 +23,38 @@ import random
 HTTP_PORT = 52000
 JSON_FILE = 'HAI-Google Play Android Developer-ec4b6d35d5b1.json'
 
+def get_store_link(package_name):
+    return 'https://play.google.com/store/apps/details?id=%s' % package_name
+
+def read_source(url):
+    return urllib.urlopen(url).read()
+
+def get_cover_image_url(source):
+    i = source.find('"cover-image" src="')
+    if i == -1:
+        return None
+
+    # Skip to the first ".
+    i += 19
+
+    j = source.find('"', i)
+    if j == -1:
+        return None
+
+    # Skip =w300
+    j -= 4
+
+    # Substring.
+    result = source[i:j]
+
+    # Add https:
+    result = 'https:%s' % result
+
+    # Add =w16
+    result += 'w16'
+
+    return result
+
 # Converts from star count to text.
 def parse_stars(star_count):
     stars = {}
@@ -158,8 +190,12 @@ def handle_command(params, response, service):
         if not reviews_page is None:
             attachments = []
             reviews = reviews_page['reviews']
+            image_url = get_cover_image_url(read_source(get_store_link(text)))
+            print image_url
             for review in reviews:
                 attachment = format_review(review)
+                if image_url != None:
+                    attachment['footer_icon'] = image_url
                 attachments.append(attachment)
 
             response['attachments'] = attachments
