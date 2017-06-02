@@ -82,7 +82,21 @@ def format_review(review):
 
     return attachment
 
-def handle_command(data, response, service):
+def handle_message_button(params, response, service):
+    original_message = params['original_message']
+
+def handle_message_menu(params, response, service):
+    # Input value.
+    value = params['value']
+    response['options'] = []
+
+    # Echo the value.
+    response['options'].append({
+        'text' : value,
+        'value' : 'input'
+    })
+
+def handle_command(params, response, service):
     user_id         = params['user_id']
     channel_id      = params['channel_id']
     text            = params['text']
@@ -143,20 +157,35 @@ def MakeHandlerClass(service):
             post_data = self.rfile.read(content_length)
             print 'length = %d' % content_length
             decoded_data = urllib.unquote(post_data).decode('utf8')
-            params = dict(urlparse.parse_qsl(decoded_data))            
+            params = dict(urlparse.parse_qsl(decoded_data))
 
             response = {}
-            response['response_type'] = 'in_channel'
+            # response['response_type'] = 'in_channel'
 
             payload = params.get('payload')
             if payload != None:
                 # Button.
+                print 'Button type'
                 payload_dict = json.loads(payload)
                 print json.dumps(payload_dict, indent=4)
+
+                original_message = payload_dict.get('original_message')
+                if original_message == None:
+                    print 'Message menu type'
+                    # Message menu.
+                    handle_message_menu(payload_dict, response, service)
+                    
+                else:
+                    print 'Message button type'
+                    # Message button or an option in message menu was selected.
+                    handle_message_button(payload_dict, response, service)
             else:
+                print 'Command type'
+                print json.dumps(params, indent=4) 
                 # Command.
-                print json.dumps(params, indent=4)
                 handle_command(params, response, service)
+
+            print 'response = %s' % json.dumps(response, indent=4)
 
             self._set_headers()
             self.wfile.write(json.dumps(response))
