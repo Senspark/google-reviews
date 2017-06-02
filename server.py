@@ -77,7 +77,6 @@ def format_review(review):
     # color = '#{:06x}'.format(random.randint(0x000000, 0xffffff))
     color = color_for_stars(star_rating)
 
-    # Samnple
     # Reserved symbols: 👍👎 ·
     attachment['author_name']   = u'%s · %s' % (author_name, country_name)
     attachment['title']         = parse_stars(star_rating)
@@ -86,14 +85,39 @@ def format_review(review):
     attachment['color']         = color
     attachment['mrkdwn_in']     = 'text'
 
+    # Unique callback id.
+    attachment['callback_id']   = review_id
+
     # App version code and version name.
     if app_version_name != None:
         attachment['footer'] = 'v%s (%s)' % (app_version_name, app_version_code)
+
+    # Buttons.
+    actions = []
+
+    # Translate (to English) button.
+    translate_button = {}
+    translate_button['name'] = 'translate'
+    translate_button['text'] = 'Translate to English'
+    translate_button['type'] = 'button'
+
+    # Reply button.
+    reply_button = {}
+    reply_button['name'] = 'reply'
+    reply_button['text'] = 'Reply'
+    reply_button['type'] = 'select'
+    reply_button['data_source'] = 'external'
+    reply_button['min_query_length'] = 2
+
+    attachment['actions'] = [translate_button, reply_button]
 
     return attachment
 
 def handle_message_button(params, response, service):
     original_message = params['original_message']
+
+    callback_id     = params['callback_id']
+    response_url    = params['response_url']
 
 def handle_message_menu(params, response, service):
     # Input value.
