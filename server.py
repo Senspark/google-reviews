@@ -40,6 +40,10 @@ def parse_time_point(seconds_since_epoch):
     return time.strftime("%b %-d, %Y at %-I:%M %p", time.gmtime(int(seconds_since_epoch)))
 
 # Format the specified review.
+# Sample:
+# ★★★★☆ May 31, 2017 at 9:59 AM
+# this is my comment
+# by This_is_my_name · 1111 (1.0.1) · England
 def format_review(review):
     author_name         = review['authorName']
     review_id           = review['reviewId']
