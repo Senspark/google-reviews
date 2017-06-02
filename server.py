@@ -72,12 +72,12 @@ def format_review(review):
     if len(author_name) > 0:
         last_line_args.append('_by %s_' % author_name)
 
-    # App version code and version name.
-    if app_version_name != None:
-        last_line_args.append('%s (%s)' % (app_version_code, app_version_name))
-
     # Country name.
     last_line_args.append('%s' % country_name)
+
+    # App version code and version name.
+    if app_version_name != None:
+        last_line_args.append('v%s (%s)' % (app_version_name, app_version_code))
 
     text_lines.append('%s' % u' · '.join(last_line_args))
     return '\n'.join(text_lines)
