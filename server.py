@@ -33,6 +33,15 @@ def parse_stars(star_count):
     stars[5] = u'★★★★★'
     return stars[star_count]
 
+def color_for_stars(star_count):
+    colors = {}
+    colors[1] = '#ffdddd'
+    colors[2] = '#eebbbb'
+    colors[3] = '#dd8888'
+    colors[4] = '#cc4444'
+    colors[5] = '#880000'
+    return colors[star_count]
+
 # Convert seconds to text.
 # Sample: May 31, 2017 at 9:59 AM.
 def parse_time_point(seconds_since_epoch):
@@ -65,7 +74,8 @@ def format_review(review):
     attachment = {}
 
     # Color.
-    color = '#{:06x}'.format(random.randint(0x000000, 0xffffff))
+    # color = '#{:06x}'.format(random.randint(0x000000, 0xffffff))
+    color = color_for_stars(star_rating)
 
     # Samnple
     # Reserved symbols: 👍👎 ·
