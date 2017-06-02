@@ -18,6 +18,7 @@ import oauth2client.service_account
 import apiclient.discovery
 import time
 import pycountry
+import random
 
 HTTP_PORT = 52000
 JSON_FILE = 'HAI-Google Play Android Developer-ec4b6d35d5b1.json'
@@ -41,9 +42,10 @@ def parse_time_point(seconds_since_epoch):
 
 # Format the specified review.
 # Sample:
-# ★★★★☆ May 31, 2017 at 9:59 AM
+# Author · Viet Name
+# ★★★★☆
 # this is my comment
-# by This_is_my_name · 1111 (1.0.1) · England
+# v1.0.1 (1111) | May 31, 2017 at 9:59 AM
 def format_review(review):
     author_name         = review['authorName']
     review_id           = review['reviewId']
@@ -60,27 +62,25 @@ def format_review(review):
     language_code, country_code = reviewer_language.split('_')
     country_name = pycountry.countries.get(alpha_2=country_code).name
 
+    attachment = {}
+
+    # Color.
+    color = '#{:06x}'.format(random.randint(0x000000, 0xffffff))
+
     # Samnple
     # Reserved symbols: 👍👎 ·
-    text_lines = []
-    text_lines.append('%s _%s_' % (parse_stars(star_rating), parse_time_point(last_modified)))
-    text_lines.append('%s' % text)
-
-    last_line_args = []
-
-    # Author name.
-    if len(author_name) > 0:
-        last_line_args.append('_by %s_' % author_name)
-
-    # Country name.
-    last_line_args.append('%s' % country_name)
+    attachment['author_name']   = u'%s · %s' % (author_name, country_name)
+    attachment['title']         = parse_stars(star_rating)
+    attachment['text']          = text
+    attachment['ts']            = last_modified
+    attachment['color']         = color
+    attachment['mrkdwn_in']     = 'text'
 
     # App version code and version name.
     if app_version_name != None:
-        last_line_args.append('v%s (%s)' % (app_version_name, app_version_code))
+        attachment['footer'] = 'v%s (%s)' % (app_version_name, app_version_code)
 
-    text_lines.append('%s' % u' · '.join(last_line_args))
-    return '\n'.join(text_lines)
+    return attachment
 
 # https://gist.github.com/bradmontgomery/2219997
 # https://stackoverflow.com/questions/21631799/how-can-i-pass-parameters-to-a-requesthandler
@@ -142,9 +142,7 @@ def MakeHandlerClass(service):
                     attachments = []
                     reviews = reviews_page['reviews']
                     for review in reviews:
-                        attachment = {}
-                        attachment['text'] = format_review(review)
-                        attachment['mrkdwn_in'] = ['text']
+                        attachment = format_review(review)
                         attachments.append(attachment)
 
                     response['attachments'] = attachments
