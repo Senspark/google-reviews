@@ -82,6 +82,40 @@ def format_review(review):
 
     return attachment
 
+def handle_command(data, response, service):
+    user_id         = params['user_id']
+    channel_id      = params['channel_id']
+    text            = params['text']
+    response_url    = params['response_url']
+    team_id         = params['team_id']
+    channel_name    = params['channel_name']
+    token           = params['token']
+    command         = params['command']
+    team_domain     = params['team_domain']
+    user_name       = params['user_name']
+
+    if command == '/reviews':
+        reviews_resources = service.reviews()
+        try:
+            reviews_page = reviews_resources.list(
+                packageName=text, 
+                maxResults=5
+            ).execute()
+        except Exception as e:
+            reviews_page = None
+            response['text'] = str(e)
+
+        print json.dumps(reviews_page, indent=4)
+
+        if not reviews_page is None:
+            attachments = []
+            reviews = reviews_page['reviews']
+            for review in reviews:
+                attachment = format_review(review)
+                attachments.append(attachment)
+
+            response['attachments'] = attachments
+
 # https://gist.github.com/bradmontgomery/2219997
 # https://stackoverflow.com/questions/21631799/how-can-i-pass-parameters-to-a-requesthandler
 def MakeHandlerClass(service):
@@ -109,45 +143,20 @@ def MakeHandlerClass(service):
             post_data = self.rfile.read(content_length)
             print 'length = %d' % content_length
             decoded_data = urllib.unquote(post_data).decode('utf8')
-            params = dict(urlparse.parse_qsl(decoded_data))
-            print json.dumps(params, indent=4)
-
-            user_id         = params['user_id']
-            channel_id      = params['channel_id']
-            text            = params['text']
-            response_url    = params['response_url']
-            team_id         = params['team_id']
-            channel_name    = params['channel_name']
-            token           = params['token']
-            command         = params['command']
-            team_domain     = params['team_domain']
-            user_name       = params['user_name']
+            params = dict(urlparse.parse_qsl(decoded_data))            
 
             response = {}
-
-            if command == '/reviews':
-                reviews_resources = service.reviews()
-                try:
-                    reviews_page = reviews_resources.list(
-                        packageName=text, 
-                        maxResults=5
-                    ).execute()
-                except Exception as e:
-                    reviews_page = None
-                    response['text'] = str(e)
-
-                print json.dumps(reviews_page, indent=4)
-
-                if not reviews_page is None:
-                    attachments = []
-                    reviews = reviews_page['reviews']
-                    for review in reviews:
-                        attachment = format_review(review)
-                        attachments.append(attachment)
-
-                    response['attachments'] = attachments
-
             response['response_type'] = 'in_channel'
+
+            payload = params.get('payload')
+            if payload != None:
+                # Button.
+                payload_dict = json.loads(payload)
+                print json.dumps(payload_dict, indent=4)
+            else:
+                # Command.
+                print json.dumps(params, indent=4)
+                handle_command(params, response, service)
 
             self._set_headers()
             self.wfile.write(json.dumps(response))
