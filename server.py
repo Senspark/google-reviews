@@ -19,6 +19,7 @@ import apiclient.discovery
 import time
 import pycountry
 import random
+import HTMLParser
 
 HTTP_PORT = 52000
 JSON_FILE = 'HAI-Google Play Android Developer-ec4b6d35d5b1.json'
@@ -117,23 +118,33 @@ def format_review(review):
     attachment['color']         = color
     attachment['mrkdwn_in']     = 'text'
 
-    # Unique callback id.
-    attachment['callback_id']   = review_id
-
     # App version code and version name.
     if app_version_name != None:
         attachment['footer'] = 'v%s (%s)' % (app_version_name, app_version_code)
 
     # Buttons.
-    actions = []
+    attachment['actions'] = []
 
+    return attachment
+
+def get_user_comment(review):
+    text = review['comments'][0]['userComment']['text']
+    print 'translated_text = %s' % text.encode('utf8')
+    return HTMLParser.HTMLParser().unescape(text)
+
+def add_translate_button(attachment):
     # Translate (to English) button.
     translate_button = {}
     translate_button['name'] = 'translate'
     translate_button['text'] = 'Translate to English'
     translate_button['type'] = 'button'
 
-    # Reply button.
+    attachment['actions'].append(translate_button)
+
+def remove_translate_button(attachment):
+    attachment['actions'] = [action for action in attachment['actions'] if action['name'] != 'translate']
+
+def add_reply_button(attachment):
     reply_button = {}
     reply_button['name'] = 'reply'
     reply_button['text'] = 'Reply'
@@ -141,15 +152,38 @@ def format_review(review):
     reply_button['data_source'] = 'external'
     reply_button['min_query_length'] = 2
 
-    attachment['actions'] = [translate_button, reply_button]
-
-    return attachment
+    attachment['actions'].append(reply_button)
 
 def handle_message_button(params, response, service):
-    original_message = params['original_message']
+    original_message    = params['original_message']
+    attachment_id       = params['attachment_id']
+    callback_id         = params['callback_id']
+    response_url        = params['response_url']
+    actions             = params['actions']
 
-    callback_id     = params['callback_id']
-    response_url    = params['response_url']
+    package_name, review_id = callback_id.split('|')
+
+    if actions[0]['name'] == 'translate':
+        # Translate button.
+        review = service.reviews().get(
+            packageName=package_name, 
+            reviewId=review_id,
+            translationLanguage='en_US'
+        ).execute()
+
+        translated_text = get_user_comment(review)
+
+        attachments = []
+        for original_attachment in original_message['attachments']:
+            if str(original_attachment['id']) == attachment_id:
+                original_attachment['text'] += '\nTranslated: %s' % translated_text
+                remove_translate_button(original_attachment)
+            attachments.append(original_attachment)
+
+        response['attachments'] = attachments
+
+    # Replace the old message.
+    response['replace_original'] = True
 
 def handle_message_menu(params, response, service):
     # Input value.
@@ -175,10 +209,11 @@ def handle_command(params, response, service):
     user_name       = params['user_name']
 
     if command == '/reviews':
+        package_name = text
         reviews_resources = service.reviews()
         try:
             reviews_page = reviews_resources.list(
-                packageName=text, 
+                packageName=package_name, 
                 maxResults=5
             ).execute()
         except Exception as e:
@@ -190,12 +225,20 @@ def handle_command(params, response, service):
         if not reviews_page is None:
             attachments = []
             reviews = reviews_page['reviews']
-            image_url = get_cover_image_url(read_source(get_store_link(text)))
-            print image_url
+            image_url = get_cover_image_url(read_source(get_store_link(package_name)))
             for review in reviews:
                 attachment = format_review(review)
+
+                add_translate_button(attachment)
+                add_reply_button(attachment)
+
+                # Add a footer icon if any.
                 if image_url != None:
                     attachment['footer_icon'] = image_url
+
+                # Callback ID contains both package name and review ID.
+                attachment['callback_id'] = '%s|%s' % (package_name, review['reviewId'])
+
                 attachments.append(attachment)
 
             response['attachments'] = attachments
@@ -225,17 +268,26 @@ def MakeHandlerClass(service):
             print 'do_POST'
             content_length = int(self.headers['Content-Length'])
             post_data = self.rfile.read(content_length)
+
             print 'length = %d' % content_length
-            decoded_data = urllib.unquote(post_data).decode('utf8')
+            # print 'data = %s' % post_data
+            decoded_data = urllib.unquote_plus(post_data)
+
+            # print 'decoded_data = %s' % decoded_data
+            decoded_data = HTMLParser.HTMLParser().unescape(decoded_data)
+            # print 'decoded_data = %s' % decoded_data
+
             params = dict(urlparse.parse_qsl(decoded_data))
+            # print 'params = %s' % json.dumps(params, indent=4)
 
             response = {}
-            # response['response_type'] = 'in_channel'
+            response['response_type'] = 'in_channel'
 
             payload = params.get('payload')
             if payload != None:
                 # Button.
                 print 'Button type'
+                print 'payload = %s' % payload
                 payload_dict = json.loads(payload)
                 print json.dumps(payload_dict, indent=4)
 
