@@ -105,6 +105,14 @@ def reply_review(service, package_name, review_id, reply_text):
         body={'replyText': reply_text}
     ).execute()
 
+def create_callback_id(review, package_name, tag):
+    review_id = review['reviewId']
+    return '|'.join([review_id, package_name, tag])
+
+def parse_callback_id(callback_id):
+    review_id, package_name, tag = callback_id.split('|')
+    return review_id, package_name, tag
+
 # Format the specified review.
 # Sample:
 # Author · Viet Name
@@ -113,7 +121,7 @@ def reply_review(service, package_name, review_id, reply_text):
 # v1.0.1 (1111) | May 31, 2017 at 9:59 AM
 # @param review The review information retrieved from androidpublisher.
 # @return A formatted dictionary.
-def format_user_review(review, package_name):
+def format_user_comment(review, package_name):
     author_name         = review['authorName']
     review_id           = review['reviewId']
     user_comment        = review['comments'][0]['userComment']
@@ -143,7 +151,7 @@ def format_user_review(review, package_name):
     }]
 
     # Callback ID contains both package name and review ID.
-    attachment['callback_id']   = '%s|%s' % (package_name, review_id)
+    attachment['callback_id']   = create_callback_id(review, package_name, 'user')
 
     # Header.
     author_texts = []
@@ -174,28 +182,42 @@ def format_user_review(review, package_name):
 
     return attachment
 
-def format_developer_comment(review):
-    comments            = review['comments']
-    comment_count = len(comments)
-    if comment_count < 2:
+def format_developer_comment(review, package_name):
+    comment = get_developer_comment_object(review)
+    if comment == None:
         return None
-
-    developer_comment   = comments[1]['developerComment']
-    text                = developer_comment['text']
-    last_modified       = developer_comment['lastModified']['seconds']
+    text                = comment['text']
+    last_modified       = comment['lastModified']['seconds']
 
     star_rating = get_star_rating(review)
 
     attachment = {}
-    attachment['text']      = '*Reply*: %s' % text
-    attachment['ts']        = last_modified
-    attachment['color']     = color_for_stars(star_rating)
-    attachment['mrkdwn_in'] = ['text']
+    attachment['title']         = 'Reply'
+    attachment['text']          = text
+    attachment['ts']            = last_modified
+    attachment['color']         = color_for_stars(star_rating)
+    attachment['mrkdwn_in']     = ['text']
+    attachment['callback_id']   = create_callback_id(review, package_name, 'developer')
 
     return attachment
 
 def get_user_comment(review):
     return review['comments'][0]['userComment']['text']
+
+def get_developer_comment_object(review):
+    comments = review['comments']
+    comment_count = len(comments)
+    if comment_count < 2:
+        return None
+
+    return comments[1]['developerComment']
+
+def get_developer_comment(review):
+    comment = get_developer_comment_object(review)
+    if comment == None:
+        return None
+
+    return comment['text']
 
 def split_comment(comment):
     title, body = comment.split('\t', 1)
@@ -233,7 +255,7 @@ def handle_message_button(params, response, service):
     response_url        = params['response_url']
     actions             = params['actions']
 
-    package_name, review_id = callback_id.split('|')
+    review_id, package_name, tag = parse_callback_id(callback_id)
 
     action              = actions[0]
     action_type         = action['type']
@@ -411,7 +433,7 @@ def handle_command(params, response, service):
             # image_url = get_cover_image_url(read_source(get_store_link(package_name)))
 
             for review in reviews:
-                attachment = format_user_review(review, package_name)
+                attachment = format_user_comment(review, package_name)
 
                 add_translate_button(attachment)
                 add_reply_button(attachment)
@@ -422,7 +444,7 @@ def handle_command(params, response, service):
 
                 attachments.append(attachment)
 
-                dev_attachment = format_developer_comment(review)
+                dev_attachment = format_developer_comment(review, package_name)
                 if dev_attachment != None:
                     attachments.append(dev_attachment)
 
