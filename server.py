@@ -24,12 +24,21 @@ import HTMLParser
 HTTP_PORT = 52000
 JSON_FILE = 'HAI-Google Play Android Developer-ec4b6d35d5b1.json'
 
+# Gets the Google Play Store app link.
+# @param package_name The package name of the application.
+# @return The URL link to store.
 def get_store_link(package_name):
     return 'https://play.google.com/store/apps/details?id=%s' % package_name
 
+# Attempts to read the HTML source.
+# @param url The URL to the source.
+# @return HTML source.
 def read_source(url):
     return urllib.urlopen(url).read()
 
+# Gets the cover image URL within the HTML source.
+# @param source The HTML source.
+# @return Cover image URL.
 def get_cover_image_url(source):
     i = source.find('"cover-image" src="')
     if i == -1:
@@ -57,6 +66,7 @@ def get_cover_image_url(source):
     return result
 
 # Converts from star count to text.
+# @param star_count The number of stars
 def parse_stars(star_count):
     stars = {}
     stars[1] = u'★☆☆☆☆'
@@ -88,6 +98,8 @@ def parse_time_point(seconds_since_epoch):
 # ★★★★☆
 # this is my comment
 # v1.0.1 (1111) | May 31, 2017 at 9:59 AM
+# @param review The review information retrieved from androidpublisher.
+# @return A formatted dictionary.
 def format_review(review):
     author_name         = review['authorName']
     review_id           = review['reviewId']
