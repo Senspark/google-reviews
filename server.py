@@ -122,7 +122,7 @@ def parse_callback_id(callback_id):
 # @param review The review information retrieved from androidpublisher.
 # @return A formatted dictionary.
 def format_user_comment(review, package_name):
-    author_name         = review['authorName']
+    author_name         = review.get('authorName', None)
     review_id           = review['reviewId']
     user_comment        = review['comments'][0]['userComment']
     app_version_code    = user_comment.get('appVersionCode', None)
@@ -157,7 +157,7 @@ def format_user_comment(review, package_name):
     author_texts = []
 
     # User's name.
-    if len(author_name) > 0:
+    if author_name != None and len(author_name) > 0:
         author_texts.append(author_name)
 
     # User's country.
