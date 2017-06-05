@@ -113,7 +113,7 @@ def reply_review(service, package_name, review_id, reply_text):
 # v1.0.1 (1111) | May 31, 2017 at 9:59 AM
 # @param review The review information retrieved from androidpublisher.
 # @return A formatted dictionary.
-def format_user_review(review):
+def format_user_review(review, package_name):
     author_name         = review['authorName']
     review_id           = review['reviewId']
     user_comment        = review['comments'][0]['userComment']
@@ -132,16 +132,38 @@ def format_user_review(review):
     # Color.
     color = color_for_stars(star_rating)
 
-    attachment['author_name']   = u'%s · %s' % (author_name, country_name)
     attachment['title']         = parse_stars(star_rating)
     attachment['text']          = get_user_comment(review)
     attachment['ts']            = last_modified
     attachment['color']         = color
     attachment['mrkdwn_in']     = ['text']
 
-    # App version code and version name.
+    # Callback ID contains both package name and review ID.
+    attachment['callback_id']   = '%s|%s' % (package_name, review_id)
+
+    # Header.
+    author_texts = []
+
+    # User's name.
+    if len(author_name) > 0:
+        author_texts.append(author_name)
+
+    # User's country.
+    author_texts.append(country_name)
+
+    attachment['author_name'] = u' · '.join(author_texts)
+
+    # Footer.
+    footer_texts = []
+
+    # Package name.
+    footer_texts.append(package_name)
+
+    # App version code and version name.    
     if app_version_name != None:
-        attachment['footer'] = 'v%s (%s)' % (app_version_name, app_version_code)
+        footer_texts.append('v%s (%s)' % (app_version_name, app_version_code))
+
+    attachment['footer'] = u' · '.join(footer_texts)
 
     # Buttons.
     attachment['actions'] = []
@@ -372,19 +394,19 @@ def handle_command(params, response, service):
         if not reviews_page is None:
             attachments = []
             reviews = reviews_page['reviews']
-            image_url = get_cover_image_url(read_source(get_store_link(package_name)))
+
+            # Slow!            
+            # image_url = get_cover_image_url(read_source(get_store_link(package_name)))
+
             for review in reviews:
-                attachment = format_user_review(review)
+                attachment = format_user_review(review, package_name)
 
                 add_translate_button(attachment)
                 add_reply_button(attachment)
 
                 # Add a footer icon if any.
-                if image_url != None:
-                    attachment['footer_icon'] = image_url
-
-                # Callback ID contains both package name and review ID.
-                attachment['callback_id'] = '%s|%s' % (package_name, review['reviewId'])
+                # if image_url != None:
+                #    attachment['footer_icon'] = image_url
 
                 attachments.append(attachment)
 
