@@ -20,9 +20,79 @@ import time
 import pycountry
 import random
 import HTMLParser
+import os
 
 HTTP_PORT = 52000
 JSON_FILE = 'HAI-Google Play Android Developer-ec4b6d35d5b1.json'
+
+class Config:
+    __data = None
+
+    @classmethod
+    def get_current_dir(cls):
+        return os.path.dirname(os.path.realpath(__file__))
+
+    @classmethod
+    def get_config_path(cls):
+        return os.path.join(cls.get_current_dir(), 'config.json')
+
+    @classmethod
+    def __create_config_file_if_not_exist(cls):
+        path = cls.get_config_path()
+        if not os.path.exists(path):
+            with open(path, 'w') as ignored_file:
+                ignored = 1
+
+    def __lazy_read_config_data(self):
+        if self.__data == None:
+            self.read_config_data()
+
+    def read_config_data(self):
+        Config.__create_config_file_if_not_exist()
+        with open(Config.get_config_path(), 'r') as input_file:
+            try:
+                self.__data = json.load(input_file)
+            except ValueError:
+                self.__data = {}
+
+    def write_config_data(self):
+        if self.__data != None:
+            with open(Config.get_config_path(), 'w') as output_file:
+                json.dump(self.__data, output_file)
+
+    def __get_auto_time_point_object(self):
+        self.__lazy_read_config_data()
+        return self.__data.get('auto', {})
+
+    def __get_manual_time_point_object(self):
+        self.__lazy_read_config_data()
+        return self.__data.get('manual', {})
+
+    def get_auto_time_point(self, package_name):
+        return self.__get_auto_time_point_object().get(package_name, 0)
+
+    def get_manual_time_point(self, package_name):
+        return self.__get_manual_time_point_object().get(package_name, 0)
+
+    def __lazy_set_auto_time_point_object(self):
+        if self.__data.get('auto') == None:
+            self.__data['auto'] = {}
+
+    def __lazy_set_manual_time_point_object(self):
+        if self.__data.get('manual') == None:
+            self.__data['manual'] = {}
+
+    def set_auto_time_point(self, package_name, time_point):
+        self.__lazy_read_config_data()
+        self.__lazy_set_auto_time_point_object()
+        self.__data['auto'][package_name] = time_point
+        self.write_config_data()
+
+    def set_manual_time_point(self, package_name, time_point):
+        self.__lazy_read_config_data()
+        self.__lazy_set_manual_time_point_object()
+        self.__data['manual'][package_name] = time_point
+        self.write_config_data()
 
 # Gets the Google Play Store app link.
 # @param package_name The package name of the application.
@@ -92,6 +162,10 @@ def parse_time_point(seconds_since_epoch):
     # https://stackoverflow.com/questions/12400256/python-converting-epoch-time-into-the-datetime
     # http://strftime.org/
     return time.strftime("%b %-d, %Y at %-I:%M %p", time.gmtime(int(seconds_since_epoch)))
+
+# https://stackoverflow.com/questions/4548684/how-to-get-the-seconds-since-epoch-from-the-time-date-output-of-gmtime-in-py
+def get_seconds_since_epoch():
+    return int(time.time())
 
 # https://developers.google.com/android-publisher/api-ref/reviews/reply
 # https://developers.google.com/apis-explorer/#p/androidpublisher/v2/androidpublisher.reviews.reply
@@ -458,7 +532,7 @@ def handle_help_command(response):
 def filter_reviews(reviews, seconds_since_epoch):
     return [review for review in reviews if get_user_last_modifier(review) > seconds_since_epoch]
 
-def handle_command(params, response, service):
+def handle_command(params, response, service, config):
     user_id         = params['user_id']
     channel_id      = params['channel_id']
     text            = params['text']
@@ -543,13 +617,15 @@ def handle_command(params, response, service):
 
             review_count = len(reviews)
             response['text'] = 'There are %d reviews for %s' % (review_count, package_name)
+            config.set_manual_time_point(package_name, get_seconds_since_epoch())
 
 # https://gist.github.com/bradmontgomery/2219997
 # https://stackoverflow.com/questions/21631799/how-can-i-pass-parameters-to-a-requesthandler
-def MakeHandlerClass(service):
+def MakeHandlerClass(service, config):
     class MyHandler(BaseHTTPServer.BaseHTTPRequestHandler, object):
         def __init__(self, *args, **kwargs):
             self.service = service
+            self.config = config
             super(MyHandler, self).__init__(*args, **kwargs)
 
         def _set_headers(self):
@@ -604,7 +680,7 @@ def MakeHandlerClass(service):
                 print 'Command type'
                 print json.dumps(params, indent=4) 
                 # Command.
-                handle_command(params, response, service)
+                handle_command(params, response, service, config)
 
             print 'response = %s' % json.dumps(response, indent=4)
 
@@ -621,9 +697,9 @@ def connect_google_client():
     service = apiclient.discovery.build('androidpublisher', 'v2', http=credentials.authorize(httplib2.Http()))
     return service
 
-def run_server(service):
+def run_server(service, config):
     try:
-        server = BaseHTTPServer.HTTPServer(('', HTTP_PORT), MakeHandlerClass(service))
+        server = BaseHTTPServer.HTTPServer(('', HTTP_PORT), MakeHandlerClass(service, config))
         print 'Started HTTP server on port %s' % HTTP_PORT
 
         server.serve_forever()
@@ -634,4 +710,5 @@ def run_server(service):
 
 if __name__ == '__main__':
     service = connect_google_client()
-    run_server(service)
+    config = Config()
+    run_server(service, config)
