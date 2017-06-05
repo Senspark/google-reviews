@@ -208,6 +208,78 @@ def handle_message_menu(params, response, service):
         'value' : 'input'
     })
 
+    # Pre-defined replies.
+    # https://docs.google.com/document/d/1pVQTriN4YoybD3T7xegmvjY9vgqar8ivP2BvyHQshg4/edit?ts=5677c503
+
+    # Dùng cho: Phàn nàn về game lỗi hay ko hài lòng về hiệu năng.
+    # Usage: Complains about game bugs or Dissatisfaction.
+    response['options'].append({
+        'text' : (
+            'Thanks for your feedback!'
+            'Please give us more details of your dissatisfaction, we will fix it for you!'
+            'Thanks again, and please give us the best rating (5★), help us more motivation to continue improving this game!'
+        ),
+        'value' : 'reply_0'
+    })
+
+    # Dùng cho: Phàn nàn về game kém hay hoặc thiếu tính năng.
+    # Usage: Complains about bad games or missing features.
+    response['options'].append({
+        'text' : (
+            'Thanks for your feedback!'
+            'We think it make this game more challenge!'
+            'Let\'s wait for next versions for cool gameplay, it will be coming soon!'
+            'Thanks again, and please give us the best rating (5★), help us more motivation to continue improving this game!'
+        ),
+        'value' : 'reply_1'
+    })
+
+    # Dùng cho: Đánh giá vô tội vạ chả biết lý do gì, hoặc chỉ đánh giá tệ.
+    # Usage: Complains about what-is-the-reason or just low ratings.
+    response['options'].append({
+        'text' : (
+            'Thanks for your feedback!'
+            'We wish you have enjoy this game.'
+            'So please give us the best rating (5★), help us more motivation to continue improving this game!'
+        ),
+        'value' : 'reply_2'
+    })
+
+    # Dùng cho: Có vẻ lỗi gì đó nhưng không nêu rõ.
+    # Usage: Complains about unknown bugs.
+    response['options'].append({
+        'text' : (
+            'Thanks for your feedback!'
+            'We think it make this game more challenge!'
+            'Let\'s wait for the next version for cool gameplay, it will be coming soon!',
+            'Thanks again, and please give us the best rating (5★), help us more motivation to continue improving this game!'
+        ),
+        'value' : 'reply_3'
+    })
+
+    # Dùng cho: Có ý kiến cập nhật hay sửa theo nhu cầu cá nhân (cách chơi, nhiều quảng cáo,...)
+    # Usage: Personal opinion (new gameplay, many ads...)
+    response['options'].append({
+        'text' : (
+            'Thanks for your feedback!'
+            'We will fix your problem!'
+            'Let\'s wait for next versions for cool gameplay, it will be coming soon!'
+            'Thanks again, and please give us the best rating (5★), help us more motivation to continue improving this game!'
+        ),
+        'value' : 'reply_4'
+    })
+
+    # Vietnamese only.
+    # Dùng cho: Có ý kiến cập nhật hay sửa theo nhu cầu cá nhân (cách chơi, nhiều quảng cáo,...)
+    response['options'].append({
+        'text' : (
+            'Cám ơn bạn đã feedback cho chúng tôi!'
+            'Chúng tôi luôn muốn người dùng đạt trải nghiệm tốt nhất.'
+            'Xin hãy cho 5★ đo là động lực để chúng tôi phát triển trò chơi này tốt hơn!'
+        ),
+        'value' : 'reply_5'
+    })
+
 def handle_command(params, response, service):
     user_id         = params['user_id']
     channel_id      = params['channel_id']
