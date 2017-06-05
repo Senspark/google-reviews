@@ -271,14 +271,12 @@ def MakeHandlerClass(service):
 
             print 'length = %d' % content_length
             # print 'data = %s' % post_data
-            decoded_data = urllib.unquote_plus(post_data)
 
-            # print 'decoded_data = %s' % decoded_data
-            decoded_data = HTMLParser.HTMLParser().unescape(decoded_data)
-            # print 'decoded_data = %s' % decoded_data
+            qsl_data = urlparse.parse_qsl(post_data)
 
-            params = dict(urlparse.parse_qsl(decoded_data))
-            # print 'params = %s' % json.dumps(params, indent=4)
+            params = dict(qsl_data)
+            print '========================================================================'
+            print 'params = %s' % json.dumps(params, indent=4)
 
             response = {}
             response['response_type'] = 'in_channel'
@@ -287,9 +285,8 @@ def MakeHandlerClass(service):
             if payload != None:
                 # Button.
                 print 'Button type'
-                print 'payload = %s' % payload
                 payload_dict = json.loads(payload)
-                print json.dumps(payload_dict, indent=4)
+                print 'payload = %s' % json.dumps(payload_dict, indent=4)
 
                 original_message = payload_dict.get('original_message')
                 if original_message == None:
