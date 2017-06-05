@@ -213,7 +213,9 @@ def handle_message_menu(params, response, service):
     response['options'].append({
         'text' : (
             'Thanks for your feedback!'
+            '\n'
             'Please give us more details of your dissatisfaction, we will fix it for you!'
+            '\n'
             'Thanks again, and please give us the best rating (5★), help us more motivation to continue improving this game!'
         ),
         'value' : 'reply_0'
@@ -224,8 +226,11 @@ def handle_message_menu(params, response, service):
     response['options'].append({
         'text' : (
             'Thanks for your feedback!'
+            '"\n"'
             'We think it make this game more challenge!'
+            '\n'
             'Let\'s wait for next versions for cool gameplay, it will be coming soon!'
+            '\n'
             'Thanks again, and please give us the best rating (5★), help us more motivation to continue improving this game!'
         ),
         'value' : 'reply_1'
@@ -236,7 +241,9 @@ def handle_message_menu(params, response, service):
     response['options'].append({
         'text' : (
             'Thanks for your feedback!'
+            '\n'
             'We wish you have enjoy this game.'
+            '\n'
             'So please give us the best rating (5★), help us more motivation to continue improving this game!'
         ),
         'value' : 'reply_2'
@@ -247,8 +254,11 @@ def handle_message_menu(params, response, service):
     response['options'].append({
         'text' : (
             'Thanks for your feedback!'
+            '\n'
             'We think it make this game more challenge!'
+            '\n'
             'Let\'s wait for the next version for cool gameplay, it will be coming soon!',
+            '\n'
             'Thanks again, and please give us the best rating (5★), help us more motivation to continue improving this game!'
         ),
         'value' : 'reply_3'
@@ -259,8 +269,11 @@ def handle_message_menu(params, response, service):
     response['options'].append({
         'text' : (
             'Thanks for your feedback!'
+            '\n'
             'We will fix your problem!'
+            '\n'
             'Let\'s wait for next versions for cool gameplay, it will be coming soon!'
+            '\n'
             'Thanks again, and please give us the best rating (5★), help us more motivation to continue improving this game!'
         ),
         'value' : 'reply_4'
@@ -271,7 +284,9 @@ def handle_message_menu(params, response, service):
     response['options'].append({
         'text' : (
             'Cám ơn bạn đã feedback cho chúng tôi!'
+            '\n'
             'Chúng tôi luôn muốn người dùng đạt trải nghiệm tốt nhất.'
+            '\n'
             'Xin hãy cho 5★ đo là động lực để chúng tôi phát triển trò chơi này tốt hơn!'
         ),
         'value' : 'reply_5'
