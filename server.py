@@ -93,6 +93,18 @@ def parse_time_point(seconds_since_epoch):
     # http://strftime.org/
     return time.strftime("%b %-d, %Y at %-I:%M %p", time.gmtime(int(seconds_since_epoch)))
 
+# https://developers.google.com/android-publisher/api-ref/reviews/reply
+# https://developers.google.com/apis-explorer/#p/androidpublisher/v2/androidpublisher.reviews.reply
+# @param package_name The application package name.
+# @param review_id The ID of the review.
+# @param reply_text The comment.
+def reply_review(service, package_name, review_id, reply_text):
+    service.reviews().reply(
+        packageName=package_name,
+        reviewId=review_id,
+        body={'replyText': reply_text}
+    ).execute()
+
 # Format the specified review.
 # Sample:
 # Author · Viet Name
@@ -101,16 +113,16 @@ def parse_time_point(seconds_since_epoch):
 # v1.0.1 (1111) | May 31, 2017 at 9:59 AM
 # @param review The review information retrieved from androidpublisher.
 # @return A formatted dictionary.
-def format_review(review):
+def format_user_review(review):
     author_name         = review['authorName']
     review_id           = review['reviewId']
     user_comment        = review['comments'][0]['userComment']
     app_version_code    = user_comment.get('appVersionCode', None)
     app_version_name    = user_comment.get('appVersionName', None)
     reviewer_language   = user_comment['reviewerLanguage']
-    text                = user_comment['text']
-    star_rating         = user_comment['starRating']
     last_modified       = user_comment['lastModified']['seconds']
+
+    star_rating = get_star_rating(review)
 
     language_code, country_code = reviewer_language.split('_')
     country_name = pycountry.countries.get(alpha_2=country_code).name
@@ -122,10 +134,10 @@ def format_review(review):
 
     attachment['author_name']   = u'%s · %s' % (author_name, country_name)
     attachment['title']         = parse_stars(star_rating)
-    attachment['text']          = text
+    attachment['text']          = get_user_comment(review)
     attachment['ts']            = last_modified
     attachment['color']         = color
-    attachment['mrkdwn_in']     = 'text'
+    attachment['mrkdwn_in']     = ['text']
 
     # App version code and version name.
     if app_version_name != None:
@@ -136,10 +148,31 @@ def format_review(review):
 
     return attachment
 
+def format_developer_comment(review):
+    comments            = review['comments']
+    comment_count = len(comments)
+    if comment_count < 2:
+        return None
+
+    developer_comment   = comments[1]['developerComment']
+    text                = developer_comment['text']
+    last_modified       = developer_comment['lastModified']['seconds']
+
+    star_rating = get_star_rating(review)
+
+    attachment = {}
+    attachment['text']      = '*Reply*: %s' % text
+    attachment['ts']        = last_modified
+    attachment['color']     = color_for_stars(star_rating)
+    attachment['mrkdwn_in'] = ['text']
+
+    return attachment
+
 def get_user_comment(review):
-    text = review['comments'][0]['userComment']['text']
-    print 'translated_text = %s' % text.encode('utf8')
-    return HTMLParser.HTMLParser().unescape(text)
+    return review['comments'][0]['userComment']['text']
+
+def get_star_rating(review):
+    return review['comments'][0]['userComment']['starRating']
 
 def add_translate_button(attachment):
     # Translate (to English) button.
@@ -172,7 +205,16 @@ def handle_message_button(params, response, service):
 
     package_name, review_id = callback_id.split('|')
 
-    if actions[0]['name'] == 'translate':
+    action              = actions[0]
+    action_type         = action['type']
+    action_name         = action['name']
+
+    if action_type == 'button':
+        action_value = action['value']
+    elif action_type == 'select':
+        action_value = action['selected_options'][0]['value']
+
+    if action_name == 'translate':
         # Translate button.
         review = service.reviews().get(
             packageName=package_name, 
@@ -185,11 +227,17 @@ def handle_message_button(params, response, service):
         attachments = []
         for original_attachment in original_message['attachments']:
             if str(original_attachment['id']) == attachment_id:
-                original_attachment['text'] += '\nTranslated: %s' % translated_text
+                original_attachment['text'] += '\n*Translated*: %s' % translated_text
                 remove_translate_button(original_attachment)
             attachments.append(original_attachment)
 
         response['attachments'] = attachments
+
+    elif action_name == 'reply':
+        reply_text = action_value
+        reply_review(service, package_name, review_id, reply_text)
+    else:
+        assert(False)
 
     # Replace the old message.
     response['replace_original'] = True
@@ -202,7 +250,7 @@ def handle_message_menu(params, response, service):
     # Echo the value.
     response['options'].append({
         'text' : value,
-        'value' : 'input'
+        'value' : value
     })
 
     # Pre-defined replies are not useful (can not see all lines).
@@ -326,7 +374,7 @@ def handle_command(params, response, service):
             reviews = reviews_page['reviews']
             image_url = get_cover_image_url(read_source(get_store_link(package_name)))
             for review in reviews:
-                attachment = format_review(review)
+                attachment = format_user_review(review)
 
                 add_translate_button(attachment)
                 add_reply_button(attachment)
@@ -339,6 +387,10 @@ def handle_command(params, response, service):
                 attachment['callback_id'] = '%s|%s' % (package_name, review['reviewId'])
 
                 attachments.append(attachment)
+
+                dev_attachment = format_developer_comment(review)
+                if dev_attachment != None:
+                    attachments.append(dev_attachment)
 
             response['attachments'] = attachments
 
