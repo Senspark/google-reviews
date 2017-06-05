@@ -449,44 +449,72 @@ def handle_command(params, response, service):
     team_domain     = params['team_domain']
     user_name       = params['user_name']
 
-    if command == '/reviews':
+    if command != '/reviews':
+        return
+
+    # Default sub-command is `auto`.
+    sub_command = 'auto'
+    package_name = None
+
+    # Format: /reviews sub_command package_name
+    if text == 'help':
+        sub_command = 'help'
+    elif text.find('_') == -1:
         package_name = text
-        reviews_resources = service.reviews()
-        try:
-            reviews_page = reviews_resources.list(
-                packageName=package_name, 
-                maxResults=5
-            ).execute()
-        except Exception as e:
-            reviews_page = None
-            response['text'] = str(e)
+    else:
+        sub_command, package_name = text.split('_')
 
-        print json.dumps(reviews_page, indent=4)
+    print 'sub_command = %s package_name = %s' % (sub_command, package_name)
 
-        if not reviews_page is None:
-            attachments = []
-            reviews = reviews_page['reviews']
+    if sub_command == 'help':
+        response['text'] = (
+            '`/reviews help` - Display this text\n'
+            '`/reviews [package name]` - Alias for `/reviews auto [package name]`\n'
+            '`/reviews auto [package name]` - Display all reviews since the last auto reviews call\n'
+            '`/reviews manual [package name]` - Display all reviews since the last manual reviews call\n'
+            '`/reviews [number] [package name]` - Display the newest `number` reviews'
+        )
+        response['mrkdwn_in'] = ['text']
+        return
 
-            # Slow!            
-            # image_url = get_cover_image_url(read_source(get_store_link(package_name)))
+    response['response_type'] = 'in_channel'
 
-            for review in reviews:
-                attachment = format_user_comment(review, package_name)
+    reviews_resources = service.reviews()
+    try:
+        reviews_page = reviews_resources.list(
+            packageName=package_name, 
+            maxResults=5
+        ).execute()
+    except Exception as e:
+        reviews_page = None
+        response['text'] = str(e)
 
-                add_translate_button(attachment)
-                add_reply_button(attachment)
+    print json.dumps(reviews_page, indent=4)
 
-                # Add a footer icon if any.
-                # if image_url != None:
-                #    attachment['footer_icon'] = image_url
+    if not reviews_page is None:
+        attachments = []
+        reviews = reviews_page['reviews']
 
-                attachments.append(attachment)
+        # Slow!
+        # image_url = get_cover_image_url(read_source(get_store_link(package_name)))
 
-                dev_attachment = format_developer_comment(review, package_name)
-                if dev_attachment != None:
-                    attachments.append(dev_attachment)
+        for review in reviews:
+            attachment = format_user_comment(review, package_name)
 
-            response['attachments'] = attachments
+            add_translate_button(attachment)
+            add_reply_button(attachment)
+
+            # Add a footer icon if any.
+            # if image_url != None:
+            #    attachment['footer_icon'] = image_url
+
+            attachments.append(attachment)
+
+            dev_attachment = format_developer_comment(review, package_name)
+            if dev_attachment != None:
+                attachments.append(dev_attachment)
+
+        response['attachments'] = attachments
 
 # https://gist.github.com/bradmontgomery/2219997
 # https://stackoverflow.com/questions/21631799/how-can-i-pass-parameters-to-a-requesthandler
@@ -524,10 +552,11 @@ def MakeHandlerClass(service):
             # print 'params = %s' % json.dumps(params, indent=4)
 
             response = {}
-            response['response_type'] = 'in_channel'
 
             payload = params.get('payload')
             if payload != None:
+                response['response_type'] = 'in_channel'
+
                 # Button.
                 print 'Button type'
                 payload_dict = json.loads(payload)
