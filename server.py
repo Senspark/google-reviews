@@ -205,6 +205,9 @@ def handle_message_menu(params, response, service):
         'value' : 'input'
     })
 
+    # Pre-defined replies are not useful (can not see all lines).
+    return
+
     # Pre-defined replies.
     # https://docs.google.com/document/d/1pVQTriN4YoybD3T7xegmvjY9vgqar8ivP2BvyHQshg4/edit?ts=5677c503
 
