@@ -57,16 +57,14 @@ def get_cover_image_url(source):
     # Substring.
     result = source[i:j]
 
-    # Add https:
-    result = 'https:%s' % result
-
-    # Add =w16
-    result += 'w16'
-
+    # Add `https:`
+    # Add `=w16`: indicate 16x16 pixels resolution.
+    result = 'https:%sw16' % result
     return result
 
 # Converts from star count to text.
 # @param star_count The number of stars
+# @return String.
 def parse_stars(star_count):
     stars = {}
     stars[1] = u'★☆☆☆☆'
@@ -76,6 +74,9 @@ def parse_stars(star_count):
     stars[5] = u'★★★★★'
     return stars[star_count]
 
+# Converts from star count to color.
+# @param star_count The number of stars.
+# @return Color in hex format.
 def color_for_stars(star_count):
     colors = {}
     colors[1] = '#ffdddd'
@@ -108,8 +109,6 @@ def format_review(review):
     app_version_name    = user_comment.get('appVersionName', None)
     reviewer_language   = user_comment['reviewerLanguage']
     text                = user_comment['text']
-    thumbs_up_count     = user_comment['thumbsUpCount']
-    thumbs_down_count   = user_comment['thumbsDownCount']
     star_rating         = user_comment['starRating']
     last_modified       = user_comment['lastModified']['seconds']
 
@@ -119,10 +118,8 @@ def format_review(review):
     attachment = {}
 
     # Color.
-    # color = '#{:06x}'.format(random.randint(0x000000, 0xffffff))
     color = color_for_stars(star_rating)
 
-    # Reserved symbols: 👍👎 ·
     attachment['author_name']   = u'%s · %s' % (author_name, country_name)
     attachment['title']         = parse_stars(star_rating)
     attachment['text']          = text
