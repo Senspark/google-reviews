@@ -201,8 +201,14 @@ def format_developer_comment(review, package_name):
 
     return attachment
 
+def get_user_comment_object(review):
+    return review['comments'][0]['userComment']
+
 def get_user_comment(review):
-    return review['comments'][0]['userComment']['text']
+    return get_user_comment_object(review)['text']
+
+def get_user_last_modifier(review):
+    return get_user_comment_object(review)['lastModified']['seconds']
 
 def get_developer_comment_object(review):
     comments = review['comments']
@@ -248,6 +254,59 @@ def add_reply_button(attachment):
 
     attachment['actions'].append(reply_button)
 
+def handle_translate_button(review_id, package_name, original_attachments, service):
+    # Translate button.
+    review = service.reviews().get(
+        packageName=package_name, 
+        reviewId=review_id,
+        translationLanguage='en_US'
+    ).execute()
+
+    user_callback_id = create_callback_id(review_id, package_name, 'user')
+    comment_title, comment_body = split_comment(get_user_comment(review))
+
+    attachments = []
+    for original_attachment in original_attachments:
+        if original_attachment['callback_id'] == user_callback_id:
+            original_attachment['fields'].append({
+                'title': comment_title,
+                'value': comment_body,
+                'short': True
+            })
+            remove_translate_button(original_attachment)
+        attachments.append(original_attachment)
+
+    return attachments
+
+def handle_reply_button(review_id, package_name, original_attachments, service, text):
+    # Reply the typed text.
+    result = reply_review(service, package_name, review_id, text)
+    reply_text = result['result']['replyText']
+    last_edited = result['result']['lastEdited']['seconds']
+
+    attachments = []
+
+    user_callback_id = create_callback_id(review_id, package_name, 'user')
+    callback_id = create_callback_id(review_id, package_name, 'developer')
+
+    # Remove existing (dev) attachment.
+    temp_attachments = [attachment for attachment in original_attachments if attachment['callback_id'] != callback_id]
+
+    # Add new (dev) attachment.
+    for original_attachment in temp_attachments:
+        attachments.append(original_attachment)
+        if original_attachment['callback_id'] == user_callback_id:
+            attachment = {}
+            attachment['title']         = 'Reply'
+            attachment['text']          = reply_text
+            attachment['ts']            = last_edited
+            attachment['color']         = original_attachment['color']
+            attachment['mrkdwn_in']     = ['text']
+            attachment['callback_id']   = callback_id
+            attachments.append(attachment)
+
+    return attachments
+
 def handle_message_button(params, response, service):
     original_message    = params['original_message']
     attachment_id       = params['attachment_id']
@@ -270,65 +329,13 @@ def handle_message_button(params, response, service):
 
     if action_name == 'translate':
         # Translate button.
-        review = service.reviews().get(
-            packageName=package_name, 
-            reviewId=review_id,
-            translationLanguage='en_US'
-        ).execute()
-
-        comment_title, comment_body = split_comment(get_user_comment(review))
-
-        attachments = []
-        for original_attachment in original_attachments:
-            if str(original_attachment['id']) == attachment_id:
-                original_attachment['fields'].append({
-                    'title': comment_title,
-                    'value': comment_body,
-                    'short': True
-                })
-                remove_translate_button(original_attachment)
-            attachments.append(original_attachment)
-
+        attachments = handle_translate_button(review_id, package_name, original_attachments, service)
         response['attachments'] = attachments
 
     elif action_name == 'reply':
         # Reply button.
-
-        succeeded = False
-        reply_text = None
-        last_edited = 0
-
-        try:
-            # Reply the typed text.
-            result = reply_review(service, package_name, review_id, action_value)
-            reply_text = result['result']['replyText']
-            last_edited = result['result']['lastEdited']['seconds']
-            succeeded = True
-        except Exception as e:
-            response['text'] = str(e)
-
-        if succeeded:
-            attachments = []
-
-            callback_id = create_callback_id(review_id, package_name, 'developer')
-
-            # Remove existing (dev) attachment.
-            temp_attachments = [attachment for attachment in original_attachments if attachment['callback_id'] != callback_id]
-
-            # Add new (dev) attachment.
-            for original_attachment in temp_attachments:
-                attachments.append(original_attachment)
-                if str(original_attachment['id']) == attachment_id:
-                    attachment = {}
-                    attachment['title']         = 'Reply'
-                    attachment['text']          = reply_text
-                    attachment['ts']            = last_edited
-                    attachment['color']         = original_attachment['color']
-                    attachment['mrkdwn_in']     = ['text']
-                    attachment['callback_id']   = callback_id
-                    attachments.append(attachment)
-
-            response['attachments'] = attachments
+        attachments = handle_reply_button(review_id, package_name, original_attachments, service, action_value)
+        response['attachments'] = attachments
 
     else:
         assert(False)
@@ -437,6 +444,19 @@ def handle_message_menu(params, response, service):
         'value' : 'reply_5'
     })
 
+def handle_help_command(response):
+    response['text'] = (
+        '`/reviews help` - Display this text\n'
+        '`/reviews [package name]` - Alias for `/reviews auto [package name]`\n'
+        '`/reviews auto [package name]` - Display all reviews since the last auto reviews call\n'
+        '`/reviews manual [package name]` - Display all reviews since the last manual reviews call\n'
+        '`/reviews [number] [package name]` - Display the newest `number` reviews'
+    )
+    response['mrkdwn_in'] = ['text']
+
+def filter_reviews(reviews, seconds_since_epoch):
+    return [review for review in reviews if get_user_last_modifier(review) > seconds_since_epoch]
+
 def handle_command(params, response, service):
     user_id         = params['user_id']
     channel_id      = params['channel_id']
@@ -453,68 +473,75 @@ def handle_command(params, response, service):
         return
 
     # Default sub-command is `auto`.
-    sub_command = 'auto'
+    sub_command = None
     package_name = None
 
     # Format: /reviews sub_command package_name
     if text == 'help':
         sub_command = 'help'
-    elif text.find('_') == -1:
+    elif text.find(' ') == -1:
+        sub_command = 'auto'
         package_name = text
     else:
-        sub_command, package_name = text.split('_')
+        sub_command, package_name = text.split(' ')
 
     print 'sub_command = %s package_name = %s' % (sub_command, package_name)
 
     if sub_command == 'help':
-        response['text'] = (
-            '`/reviews help` - Display this text\n'
-            '`/reviews [package name]` - Alias for `/reviews auto [package name]`\n'
-            '`/reviews auto [package name]` - Display all reviews since the last auto reviews call\n'
-            '`/reviews manual [package name]` - Display all reviews since the last manual reviews call\n'
-            '`/reviews [number] [package name]` - Display the newest `number` reviews'
-        )
-        response['mrkdwn_in'] = ['text']
+        handle_help_command(response)
         return
 
-    response['response_type'] = 'in_channel'
+    if sub_command == 'manual' or sub_command == 'auto' or sub_command.isdigit():
+        # Limit to 50 results only or there will be timeout.
+        max_results = 50
+        if sub_command.isdigit():
+            max_results = min(max_results, int(sub_command))
 
-    reviews_resources = service.reviews()
-    try:
-        reviews_page = reviews_resources.list(
-            packageName=package_name, 
-            maxResults=5
-        ).execute()
-    except Exception as e:
-        reviews_page = None
-        response['text'] = str(e)
+        response['response_type'] = 'in_channel'
 
-    print json.dumps(reviews_page, indent=4)
+        succeeded = False
+        reviews_resources = service.reviews()
+        try:
+            reviews_page = reviews_resources.list(
+                packageName=package_name,
+                maxResults=max_results
+            ).execute()
+            succeeded = True
+        except Exception as e:
+            reviews_page = None
+            response['text'] = str(e)
 
-    if not reviews_page is None:
-        attachments = []
-        reviews = reviews_page['reviews']
+        print json.dumps(reviews_page, indent=4)
 
-        # Slow!
-        # image_url = get_cover_image_url(read_source(get_store_link(package_name)))
+        if succeeded:
+            attachments = []
+            reviews = reviews_page['reviews']
 
-        for review in reviews:
-            attachment = format_user_comment(review, package_name)
+            print 'review_count = %d' % len(reviews)
 
-            add_translate_button(attachment)
-            add_reply_button(attachment)
+            # Slow!
+            # image_url = get_cover_image_url(read_source(get_store_link(package_name)))
 
-            # Add a footer icon if any.
-            # if image_url != None:
-            #    attachment['footer_icon'] = image_url
+            for review in reviews:
+                attachment = format_user_comment(review, package_name)
 
-            attachments.append(attachment)
+                add_translate_button(attachment)
+                add_reply_button(attachment)
 
-            dev_attachment = format_developer_comment(review, package_name)
-            if dev_attachment != None:
-                attachments.append(dev_attachment)
+                # Add a footer icon if any.
+                # if image_url != None:
+                #    attachment['footer_icon'] = image_url
 
-        response['attachments'] = attachments
+                attachments.append(attachment)
+
+                dev_attachment = format_developer_comment(review, package_name)
+                if dev_attachment != None:
+                    attachments.append(dev_attachment)
+
+            response['attachments'] = attachments
+
+            review_count = len(reviews)
+            response['text'] = 'There are %d reviews for %s' % (review_count, package_name)
 
 # https://gist.github.com/bradmontgomery/2219997
 # https://stackoverflow.com/questions/21631799/how-can-i-pass-parameters-to-a-requesthandler
