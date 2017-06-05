@@ -129,14 +129,18 @@ def format_user_review(review, package_name):
 
     attachment = {}
 
-    # Color.
-    color = color_for_stars(star_rating)
-
     attachment['title']         = parse_stars(star_rating)
-    attachment['text']          = get_user_comment(review)
     attachment['ts']            = last_modified
-    attachment['color']         = color
+    attachment['color']         = color_for_stars(star_rating)
     attachment['mrkdwn_in']     = ['text']
+
+    # https://api.slack.com/docs/message-attachments
+    comment_title, comment_body = split_comment(get_user_comment(review))
+    attachment['fields'] = [{
+        'title': comment_title,
+        'value': comment_body,
+        'short': True
+    }]
 
     # Callback ID contains both package name and review ID.
     attachment['callback_id']   = '%s|%s' % (package_name, review_id)
@@ -193,6 +197,10 @@ def format_developer_comment(review):
 def get_user_comment(review):
     return review['comments'][0]['userComment']['text']
 
+def split_comment(comment):
+    title, body = comment.split('\t', 1)
+    return title, body
+
 def get_star_rating(review):
     return review['comments'][0]['userComment']['starRating']
 
@@ -244,12 +252,16 @@ def handle_message_button(params, response, service):
             translationLanguage='en_US'
         ).execute()
 
-        translated_text = get_user_comment(review)
+        comment_title, comment_body = split_comment(get_user_comment(review))
 
         attachments = []
         for original_attachment in original_message['attachments']:
             if str(original_attachment['id']) == attachment_id:
-                original_attachment['text'] += '\n*Translated*: %s' % translated_text
+                original_attachment['fields'].append({
+                    'title': comment_title,
+                    'value': comment_body,
+                    'short': True
+                })
                 remove_translate_button(original_attachment)
             attachments.append(original_attachment)
 
