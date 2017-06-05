@@ -100,6 +100,10 @@ class Config:
 def get_store_link(package_name):
     return 'https://play.google.com/store/apps/details?id=%s' % package_name
 
+# https://webapps.stackexchange.com/questions/12125/how-to-get-a-link-to-a-google-translate-translation
+def get_google_translation_link(original_language, destination_language, text):
+    return 'http://translate.google.com/#%s/%s/%s' % (original_language, destination_language, urllib.quote_plus(text))
+
 # Attempts to read the HTML source.
 # @param url The URL to the source.
 # @return HTML source.
@@ -244,6 +248,13 @@ def format_user_comment(review, package_name):
 
     # Package name.
     footer_texts.append(package_name)
+
+    # Store link.
+    footer_texts.append('<%s|Store Link>' % get_store_link(package_name))
+
+    # Use Google Translation.
+    google_translation_link = get_google_translation_link('auto', 'en', get_user_comment(review))
+    footer_texts.append('<%s|Google Translation>' % google_translation_link)
 
     # App version code and version name.    
     if app_version_name != None:
