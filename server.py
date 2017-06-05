@@ -99,14 +99,14 @@ def parse_time_point(seconds_since_epoch):
 # @param review_id The ID of the review.
 # @param reply_text The comment.
 def reply_review(service, package_name, review_id, reply_text):
-    service.reviews().reply(
-        packageName=package_name,
-        reviewId=review_id,
-        body={'replyText': reply_text}
-    ).execute()
+    return service.reviews().reply(
+               packageName=package_name,
+               reviewId=review_id,
+               body={'replyText': reply_text}
+           ).execute()
 
-def create_callback_id(review, package_name, tag):
-    review_id = review['reviewId']
+
+def create_callback_id(review_id, package_name, tag):
     return '|'.join([review_id, package_name, tag])
 
 def parse_callback_id(callback_id):
@@ -151,7 +151,7 @@ def format_user_comment(review, package_name):
     }]
 
     # Callback ID contains both package name and review ID.
-    attachment['callback_id']   = create_callback_id(review, package_name, 'user')
+    attachment['callback_id']   = create_callback_id(review_id, package_name, 'user')
 
     # Header.
     author_texts = []
@@ -266,6 +266,8 @@ def handle_message_button(params, response, service):
     elif action_type == 'select':
         action_value = action['selected_options'][0]['value']
 
+    original_attachments = original_message['attachments']
+
     if action_name == 'translate':
         # Translate button.
         review = service.reviews().get(
@@ -277,7 +279,7 @@ def handle_message_button(params, response, service):
         comment_title, comment_body = split_comment(get_user_comment(review))
 
         attachments = []
-        for original_attachment in original_message['attachments']:
+        for original_attachment in original_attachments:
             if str(original_attachment['id']) == attachment_id:
                 original_attachment['fields'].append({
                     'title': comment_title,
@@ -290,8 +292,44 @@ def handle_message_button(params, response, service):
         response['attachments'] = attachments
 
     elif action_name == 'reply':
-        reply_text = action_value
-        reply_review(service, package_name, review_id, reply_text)
+        # Reply button.
+
+        succeeded = False
+        reply_text = None
+        last_edited = 0
+
+        try:
+            # Reply the typed text.
+            result = reply_review(service, package_name, review_id, action_value)
+            reply_text = result['result']['replyText']
+            last_edited = result['result']['lastEdited']['seconds']
+            succeeded = True
+        except Exception as e:
+            response['text'] = str(e)
+
+        if succeeded:
+            attachments = []
+
+            callback_id = create_callback_id(review_id, package_name, 'developer')
+
+            # Remove existing (dev) attachment.
+            temp_attachments = [attachment for attachment in original_attachments if attachment['callback_id'] != callback_id]
+
+            # Add new (dev) attachment.
+            for original_attachment in temp_attachments:
+                attachments.append(original_attachment)
+                if str(original_attachment['id']) == attachment_id:
+                    attachment = {}
+                    attachment['title']         = 'Reply'
+                    attachment['text']          = reply_text
+                    attachment['ts']            = last_edited
+                    attachment['color']         = original_attachment['color']
+                    attachment['mrkdwn_in']     = ['text']
+                    attachment['callback_id']   = callback_id
+                    attachments.append(attachment)
+
+            response['attachments'] = attachments
+
     else:
         assert(False)
 
@@ -482,8 +520,8 @@ def MakeHandlerClass(service):
             qsl_data = urlparse.parse_qsl(post_data)
 
             params = dict(qsl_data)
-            print '========================================================================'
-            print 'params = %s' % json.dumps(params, indent=4)
+            # print '========================================================================'
+            # print 'params = %s' % json.dumps(params, indent=4)
 
             response = {}
             response['response_type'] = 'in_channel'
