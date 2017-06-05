@@ -188,6 +188,7 @@ def format_developer_comment(review, package_name):
         return None
     text                = comment['text']
     last_modified       = comment['lastModified']['seconds']
+    review_id           = review['reviewId']
 
     star_rating = get_star_rating(review)
 
@@ -197,7 +198,7 @@ def format_developer_comment(review, package_name):
     attachment['ts']            = last_modified
     attachment['color']         = color_for_stars(star_rating)
     attachment['mrkdwn_in']     = ['text']
-    attachment['callback_id']   = create_callback_id(review, package_name, 'developer')
+    attachment['callback_id']   = create_callback_id(review_id, package_name, 'developer')
 
     return attachment
 
