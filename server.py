@@ -1,26 +1,25 @@
 # !/usr/bin/env python
 # coding: utf8
 
+import apiclient.discovery
+import BaseHTTPServer
 import contextlib
+import oauth2client.service_account
+import httplib2
+import HTMLParser
+import json
 import logging
+import os
+import pycountry
+import random
 import requests
 import socket
 import SocketServer
 import sys
 import threading
-import json
-import BaseHTTPServer
-import urllib
-import urllib2
-import urlparse
-import httplib2
-import oauth2client.service_account
-import apiclient.discovery
 import time
-import pycountry
-import random
-import HTMLParser
-import os
+import urllib
+import urlparse
 
 DEFAULT_HTTP_PORT = 52000
 JSON_FILE = 'GooglePlayCustomerService-ae3d674c4880.json'
