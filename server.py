@@ -737,8 +737,9 @@ def show_help(response):
         '`/reviews package list` - Display registered application packages for automatic call\n'
         '`/reviews package add [package name]` - Add an application package to automatic call\n'
         '`/reviews package remove [package name]` - Remove an application package form automatic call\n'
-        '`/reviews refresh interval [seconds]` - Sets the refresh interval in seconds\n'
-        '`/reviews refresh reset [seconds since now]` - Resets the next refresh to be the specified time point'
+        '`/reviews refresh interval [seconds]` - Set the refresh interval in seconds\n'
+        '`/reviews refresh schedule [seconds since now]` - Reset the next refresh to be the specified time point\n'
+        '`/reviews refresh next` - Print the next scheduled refresh time'
     )    
     response['mrkdwn_in'] = ['text']
 
@@ -809,11 +810,23 @@ def set_refresh_interval(response, config, seconds):
     lines.append('Next refresh: %s' % parse_time_point(next_refresh_time_point + get_timezone_offset()))
     response['text'] = '\n'.join(lines)
 
-def reset_next_refresh(response, config, seconds_since_now):
+def schedule_next_refresh(response, config, seconds_since_now):
     seconds_since_epoch = get_seconds_since_epoch() + seconds_since_now
     config.set_last_refresh_time_point(seconds_since_epoch - config.get_refresh_interval())
     response['response_type'] = 'in_channel'
     response['text'] = 'Next refresh: %s' % parse_time_point(seconds_since_epoch + get_timezone_offset())
+
+def print_next_refresh(response, config):
+    response['response_type'] = 'in_channel'
+    last_refresh = config.get_last_refresh_time_point()
+    refresh_interval = config.get_refresh_interval()
+
+    lines = []
+    lines.append('Next refresh:')
+    lines.append('%s' % parse_time_point(last_refresh + refresh_interval * 1 + get_timezone_offset()))
+    lines.append('%s' % parse_time_point(last_refresh + refresh_interval * 2 + get_timezone_offset()))
+    lines.append('%s' % parse_time_point(last_refresh + refresh_interval * 3 + get_timezone_offset()))
+    response['text'] = '\n'.join(lines)
 
 def handle_command(params, response, service, config):
     user_id         = params['user_id']
@@ -878,9 +891,14 @@ def handle_command(params, response, service, config):
             set_refresh_interval(response, config, int(seconds))
     ))
     commands.append(Command(
-        signature='refresh reset %d',
+        signature='refresh schedule %d',
         callback=lambda seconds_since_now:
-            reset_next_refresh(response, config, int(seconds_since_now))
+            schedule_next_refresh(response, config, int(seconds_since_now))
+    ))
+    commands.append(Command(
+        signature='refresh next',
+        callback=lambda:
+            print_next_refresh(response, config)
     ))
 
     params = text.split(' ')
@@ -984,6 +1002,32 @@ def run_server(service, config):
         pass
     server.server_close()
 
+# https://stackoverflow.com/questions/2223157/how-to-execute-a-function-asynchronously-every-60-seconds-in-python
+def schedule_automatic_refresh(service, config):
+    def __every_second():
+        current_time = get_seconds_since_epoch()
+        last_refresh = config.get_last_refresh_time_point()
+        next_refresh = last_refresh + config.get_refresh_interval()
+
+        if current_time >= next_refresh:
+            packages = config.get_package_list()
+            for package_name in packages:
+                payload = {}
+                show_reviews_with_auto_mode(payload, service, config, package_name, 20, last_refresh)
+
+                # https://stackoverflow.com/questions/9746303/how-do-i-send-a-post-request-as-a-json
+                response = requests.post(
+                    WEBHOOK_URL,
+                    data=json.dumps(payload),
+                    headers={'content-type': 'application/json'}
+                )
+
+            config.set_last_refresh_time_point(current_time)
+
+        threading.Timer(3, __every_second).start()
+
+    __every_second()
+
 if __name__ == '__main__':
     service = connect_google_client()
     config = Config()
@@ -991,4 +1035,5 @@ if __name__ == '__main__':
     for package in PACKAGE_LIST:
         config.add_package(package)
 
+    schedule_automatic_refresh(service, config)
     run_server(service, config)
