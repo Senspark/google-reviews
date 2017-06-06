@@ -22,6 +22,7 @@ import urllib
 import urlparse
 
 DEFAULT_HTTP_PORT = 52000
+DEFAULT_REFRESH_INTERVAL = 86400 # Seconds.
 JSON_FILE = 'GooglePlayCustomerService-ae3d674c4880.json'
 PACKAGE_LIST = [
     'com.senspark.shootdinosaureggs2',
@@ -123,6 +124,27 @@ class Config:
 
     def get_http_port(self):
         return self.__get_settings_object().get('port', DEFAULT_HTTP_PORT)
+
+    def get_refresh_interval(self):
+        return self.__get_settings_object().get('refresh_interval', DEFAULT_REFRESH_INTERVAL)
+
+    def set_refresh_interval(self, seconds):
+        self.__get_settings_object()['refresh_interval'] = seconds
+        self.write_config_data()
+
+    def __lazy_init_refresh_time_point(self):
+        settings = self.__get_settings_object()
+        if not 'last_refresh' in settings:
+            settings['last_refresh'] = get_seconds_since_epoch()
+            self.write_config_data()
+
+    def get_last_refresh_time_point(self):
+        self.__lazy_init_refresh_time_point()
+        return self.__get_settings_object()['last_refresh']
+
+    def set_last_refresh_time_point(self, seconds_since_epoch):
+        self.__get_settings_object()['last_refresh'] = seconds_since_epoch
+        self.write_config_data()
 
     def get_package_list(self):
         settings = self.__get_settings_object()
@@ -422,11 +444,15 @@ def split_comment(comment):
 def parse_time_point(seconds_since_epoch):
     # https://stackoverflow.com/questions/12400256/python-converting-epoch-time-into-the-datetime
     # http://strftime.org/
-    return time.strftime("%b %-d, %Y at %-I:%M %p", time.gmtime(int(seconds_since_epoch)))
+    return time.strftime("%b %-d, %Y at %-I:%M:%S %p", time.gmtime(int(seconds_since_epoch)))
 
 # https://stackoverflow.com/questions/4548684/how-to-get-the-seconds-since-epoch-from-the-time-date-output-of-gmtime-in-py
 def get_seconds_since_epoch():
     return int(time.time())
+
+# https://stackoverflow.com/questions/3168096/getting-computers-utc-offset-in-python
+def get_timezone_offset():
+    return -time.timezone
 
 # https://developers.google.com/android-publisher/api-ref/reviews/reply
 # https://developers.google.com/apis-explorer/#p/androidpublisher/v2/androidpublisher.reviews.reply
@@ -710,7 +736,9 @@ def show_help(response):
         '`/reviews show [number] [package name]` - Display the newest `number` reviews, upto 20 reviews\n'
         '`/reviews package list` - Display registered application packages for automatic call\n'
         '`/reviews package add [package name]` - Add an application package to automatic call\n'
-        '`/reviews package remove [package name]` - Remove an application package form automatic call'
+        '`/reviews package remove [package name]` - Remove an application package form automatic call\n'
+        '`/reviews refresh interval [seconds]` - Sets the refresh interval in seconds\n'
+        '`/reviews refresh reset [seconds since now]` - Resets the next refresh to be the specified time point'
     )    
     response['mrkdwn_in'] = ['text']
 
@@ -771,6 +799,22 @@ def remove_package(response, config, package_name):
     else:
         response['text'] = 'Package doesn\'t exist!'
 
+def set_refresh_interval(response, config, seconds):
+    config.set_refresh_interval(seconds)
+    next_refresh_time_point = config.get_last_refresh_time_point() + seconds
+    response['response_type'] = 'in_channel'
+
+    lines = []
+    lines.append('Refresh interval changed to %d seconds' % seconds)
+    lines.append('Next refresh: %s' % parse_time_point(next_refresh_time_point + get_timezone_offset()))
+    response['text'] = '\n'.join(lines)
+
+def reset_next_refresh(response, config, seconds_since_now):
+    seconds_since_epoch = get_seconds_since_epoch() + seconds_since_now
+    config.set_last_refresh_time_point(seconds_since_epoch - config.get_refresh_interval())
+    response['response_type'] = 'in_channel'
+    response['text'] = 'Next refresh: %s' % parse_time_point(seconds_since_epoch + get_timezone_offset())
+
 def handle_command(params, response, service, config):
     user_id         = params['user_id']
     channel_id      = params['channel_id']
@@ -827,6 +871,16 @@ def handle_command(params, response, service, config):
         signature='package remove %s',
         callback=lambda package_name:
             remove_package(response, config, package_name)
+    ))
+    commands.append(Command(
+        signature='refresh interval %d',
+        callback=lambda seconds:
+            set_refresh_interval(response, config, int(seconds))
+    ))
+    commands.append(Command(
+        signature='refresh reset %d',
+        callback=lambda seconds_since_now:
+            reset_next_refresh(response, config, int(seconds_since_now))
     ))
 
     params = text.split(' ')
