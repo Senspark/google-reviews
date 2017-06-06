@@ -739,7 +739,7 @@ def show_help(response):
         '`/reviews package remove [package name]` - Remove an application package form automatic call\n'
         '`/reviews refresh interval [seconds]` - Set the refresh interval in seconds\n'
         '`/reviews refresh schedule [seconds since now]` - Reset the next refresh to be the specified time point\n'
-        '`/reviews refresh next` - Print the next scheduled refresh time'
+        '`/reviews refresh info` - Print the refresh interval and next scheduled refresh time'
     )    
     response['mrkdwn_in'] = ['text']
 
@@ -822,6 +822,7 @@ def print_next_refresh(response, config):
     refresh_interval = config.get_refresh_interval()
 
     lines = []
+    lines.append('Current refresh interval: %d (seconds)' % refresh_interval)
     lines.append('Next refresh:')
     lines.append('%s' % parse_time_point(last_refresh + refresh_interval * 1 + get_timezone_offset()))
     lines.append('%s' % parse_time_point(last_refresh + refresh_interval * 2 + get_timezone_offset()))
@@ -896,7 +897,7 @@ def handle_command(params, response, service, config):
             schedule_next_refresh(response, config, int(seconds_since_now))
     ))
     commands.append(Command(
-        signature='refresh next',
+        signature='refresh info',
         callback=lambda:
             print_next_refresh(response, config)
     ))
