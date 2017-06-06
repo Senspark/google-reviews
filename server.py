@@ -760,7 +760,7 @@ def show_reviews(response, service, config, package_name, max_results, seconds_s
     print max_results
     reviews = fetch_reviews(service, package_name, max_results)
     if reviews == None:
-        return
+        return 0
 
     print json.dumps(reviews, indent=2)
 
@@ -768,14 +768,15 @@ def show_reviews(response, service, config, package_name, max_results, seconds_s
     attach_reviews_to_response(response, reviews, package_name)
 
     response['response_type'] = 'in_channel'
+    return len(reviews)
 
 def show_reviews_with_auto_mode(response, service, config, package_name, max_result, seconds_since_epoch):
-    show_reviews(response, service, config, package_name, max_result, seconds_since_epoch)
     config.set_auto_time_point(package_name, get_seconds_since_epoch())
+    return show_reviews(response, service, config, package_name, max_result, seconds_since_epoch)
 
 def show_reviews_with_manual_mode(response, service, config, package_name, max_result, seconds_since_epoch):
-    show_reviews(response, service, config, package_name, max_result, seconds_since_epoch)
     config.set_manual_time_point(package_name, get_seconds_since_epoch())
+    return show_reviews(response, service, config, package_name, max_result, seconds_since_epoch)
 
 def show_packages(response, config):
     packages = config.get_package_list()
@@ -1015,14 +1016,15 @@ def schedule_automatic_refresh(service, config):
             packages = config.get_package_list()
             for package_name in packages:
                 payload = {}
-                show_reviews_with_auto_mode(payload, service, config, package_name, 20, last_refresh)
+                review_count = show_reviews_with_auto_mode(payload, service, config, package_name, 20, last_refresh)
 
-                # https://stackoverflow.com/questions/9746303/how-do-i-send-a-post-request-as-a-json
-                response = requests.post(
-                    WEBHOOK_URL,
-                    data=json.dumps(payload),
-                    headers={'content-type': 'application/json'}
-                )
+                if review_count > 0:
+                    # https://stackoverflow.com/questions/9746303/how-do-i-send-a-post-request-as-a-json
+                    response = requests.post(
+                        WEBHOOK_URL,
+                        data=json.dumps(payload),
+                        headers={'content-type': 'application/json'}
+                    )
 
             config.set_last_refresh_time_point(current_time)
 
