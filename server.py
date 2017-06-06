@@ -66,6 +66,15 @@ class Config:
     def __append_unique(cls, lst, val):
         if val not in lst:
             lst.append(val)
+            return True
+        return False
+
+    @classmethod
+    def __remove_unique(cls, lst, val):
+        if val not in lst:
+            return False
+        lst.remove(val)
+        return True
 
     def __lazy_read_config_data(self):
         if self.__data == None:
@@ -120,8 +129,16 @@ class Config:
         return Config.__get_array(settings, 'packages')
 
     def add_package(self, package_name):
-        Config.__append_unique(self.get_package_list(), package_name)
-        self.write_config_data()
+        inserted = Config.__append_unique(self.get_package_list(), package_name)
+        if inserted:
+            self.write_config_data()
+        return inserted
+
+    def remove_package(self, package_name):
+        erased = Config.__remove_unique(self.get_package_list(), package_name)
+        if erased:
+            self.write_config_data()
+        return erased
 
 class Command:
     __params = None
@@ -681,7 +698,7 @@ def create_attachments(reviews, package_name):
     return attachments
 
 
-def help(response):
+def show_help(response):
     response['text'] = (
         '`/reviews help` - Display this text\n'
         '`/reviews [package name]` - Alias for `/reviews auto [package name]`\n'
@@ -706,7 +723,7 @@ def attach_reviews_to_response(response, reviews, package_name):
     else:
         response['text'] = 'There are %d reviews for %s' % (review_count, package_name)
 
-def show(response, service, config, package_name, max_results, seconds_since_epoch):
+def show_reviews(response, service, config, package_name, max_results, seconds_since_epoch):
     print max_results
     reviews = fetch_reviews(service, package_name, max_results)
     if reviews == None:
@@ -719,13 +736,37 @@ def show(response, service, config, package_name, max_results, seconds_since_epo
 
     response['response_type'] = 'in_channel'
 
-def show_with_auto_mode(response, service, config, package_name, max_result, seconds_since_epoch):
-    show(response, service, config, package_name, max_result, seconds_since_epoch)
+def show_reviews_with_auto_mode(response, service, config, package_name, max_result, seconds_since_epoch):
+    show_reviews(response, service, config, package_name, max_result, seconds_since_epoch)
     config.set_auto_time_point(package_name, get_seconds_since_epoch())
 
-def show_with_manual_mode(response, service, config, package_name, max_result, seconds_since_epoch):
-    show(response, service, config, package_name, max_result, seconds_since_epoch)
+def show_reviews_with_manual_mode(response, service, config, package_name, max_result, seconds_since_epoch):
+    show_reviews(response, service, config, package_name, max_result, seconds_since_epoch)
     config.set_manual_time_point(package_name, get_seconds_since_epoch())
+
+def show_packages(response, config):
+    packages = config.get_package_list()
+    response['response_type'] = 'in_channel'
+    if len(packages) == 0:
+        response['text'] = 'There is not any registered package'
+    else:
+        response['text'] = '\n'.join(sorted(packages))
+
+def add_package(response, config, package_name):
+    inserted = config.add_package(package_name)
+    response['response_type'] = 'in_channel'
+    if inserted:
+        response['text'] = 'Package added successfully!'
+    else:
+        response['text'] = 'Package already added!'
+
+def remove_package(response, config, package_name):
+    erased = config.remove_package(package_name)
+    response['response_type'] = 'in_channel'
+    if erased:
+        response['text'] = 'Package removed successfully!'
+    else:
+        response['text'] = 'Package doesn\'t exist!'
 
 def handle_command(params, response, service, config):
     user_id         = params['user_id']
@@ -751,22 +792,38 @@ def handle_command(params, response, service, config):
     commands = []
     commands.append(Command(
         signature='help',
-        callback=lambda:help(response)
+        callback=lambda:
+            show_help(response)
     ))
     commands.append(Command(
         signature='auto %s',
         callback=lambda package_name:
-            show_with_auto_mode(response, service, config, package_name, 20, config.get_auto_time_point(package_name))
+            show_reviews_with_auto_mode(response, service, config, package_name, 20, config.get_auto_time_point(package_name))
     ))
     commands.append(Command(
         signature='manual %s',
         callback=lambda package_name:
-            show_with_manual_mode(response, service, config, package_name, 20, config.get_manual_time_point(package_name))
+            show_reviews_with_manual_mode(response, service, config, package_name, 20, config.get_manual_time_point(package_name))
     ))
     commands.append(Command(
         signature='show %d %s',
         callback=lambda max_result, package_name:
-            show(response, service, config, package_name, min(int(max_result), 20), 0),
+            show_reviews(response, service, config, package_name, min(int(max_result), 20), 0),
+    ))
+    commands.append(Command(
+        signature='package list',
+        callback=lambda:
+            show_packages(response, config)
+    ))
+    commands.append(Command(
+        signature='package add %s',
+        callback=lambda package_name:
+            add_package(response, config, package_name)
+    ))
+    commands.append(Command(
+        signature='package remove %s',
+        callback=lambda package_name:
+            remove_package(response, config, package_name)
     ))
 
     params = text.split(' ')
