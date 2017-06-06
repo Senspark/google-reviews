@@ -22,8 +22,16 @@ import random
 import HTMLParser
 import os
 
-HTTP_PORT = 52000
-JSON_FILE = 'HAI-Google Play Android Developer-ec4b6d35d5b1.json'
+DEFAULT_HTTP_PORT = 52000
+JSON_FILE = 'GooglePlayCustomerService-ae3d674c4880.json'
+PACKAGE_LIST = [
+    'com.senspark.shootdinosaureggs2',
+    'com.senspark.goldminerclassic',
+    'com.senspark.android.southernthirteen',
+    'com.senspark.goldminerclassicorigin',
+    'com.senspark.android.phom',
+    'us.can0p.shootdinosaureggs',
+]
 
 class Config:
     __data = None
@@ -42,6 +50,23 @@ class Config:
         if not os.path.exists(path):
             with open(path, 'w') as ignored_file:
                 ignored = 1
+
+    @classmethod
+    def __get_dict(cls, data, key):
+        if data.get(key) == None:
+            data[key] = {}
+        return data[key]
+
+    @classmethod
+    def __get_array(cls, data, key):
+        if data.get(key) == None:
+            data[key] = []
+        return data[key]
+
+    @classmethod
+    def __append_unique(cls, lst, val):
+        if val not in lst:
+            lst.append(val)
 
     def __lazy_read_config_data(self):
         if self.__data == None:
@@ -62,11 +87,11 @@ class Config:
 
     def __get_auto_time_point_object(self):
         self.__lazy_read_config_data()
-        return self.__data.get('auto', {})
+        return Config.__get_dict(self.__data, 'auto')
 
     def __get_manual_time_point_object(self):
         self.__lazy_read_config_data()
-        return self.__data.get('manual', {})
+        return Config.__get_dict(self.__data, 'manual')
 
     def get_auto_time_point(self, package_name):
         return self.__get_auto_time_point_object().get(package_name, 0)
@@ -74,24 +99,29 @@ class Config:
     def get_manual_time_point(self, package_name):
         return self.__get_manual_time_point_object().get(package_name, 0)
 
-    def __lazy_set_auto_time_point_object(self):
-        if self.__data.get('auto') == None:
-            self.__data['auto'] = {}
-
-    def __lazy_set_manual_time_point_object(self):
-        if self.__data.get('manual') == None:
-            self.__data['manual'] = {}
-
     def set_auto_time_point(self, package_name, time_point):
         self.__lazy_read_config_data()
-        self.__lazy_set_auto_time_point_object()
-        self.__data['auto'][package_name] = time_point
+        self.__get_auto_time_point_object()[package_name] = time_point
         self.write_config_data()
 
     def set_manual_time_point(self, package_name, time_point):
         self.__lazy_read_config_data()
-        self.__lazy_set_manual_time_point_object()
-        self.__data['manual'][package_name] = time_point
+        self.__get_manual_time_point_object()[package_name] = time_point
+        self.write_config_data()
+
+    def __get_settings_object(self):
+        self.__lazy_read_config_data()
+        return Config.__get_dict(self.__data, 'settings')
+
+    def get_http_port(self):
+        return self.__get_settings_object().get('port', DEFAULT_HTTP_PORT)
+
+    def get_package_list(self):
+        settings = self.__get_settings_object()
+        return Config.__get_array(settings, 'packages')
+
+    def add_package(self, package_name):
+        Config.__append_unique(self.get_package_list(), package_name)
         self.write_config_data()
 
 # Gets the Google Play Store app link.
@@ -710,8 +740,8 @@ def connect_google_client():
 
 def run_server(service, config):
     try:
-        server = BaseHTTPServer.HTTPServer(('', HTTP_PORT), MakeHandlerClass(service, config))
-        print 'Started HTTP server on port %s' % HTTP_PORT
+        server = BaseHTTPServer.HTTPServer(('', config.get_http_port()), MakeHandlerClass(service, config))
+        print 'Started HTTP server on port %s' % config.get_http_port()
 
         server.serve_forever()
     except KeyboardInterrupt:
@@ -722,4 +752,8 @@ def run_server(service, config):
 if __name__ == '__main__':
     service = connect_google_client()
     config = Config()
+
+    for package in PACKAGE_LIST:
+        config.add_package(package)
+
     run_server(service, config)
