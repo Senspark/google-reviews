@@ -319,7 +319,7 @@ class Review:
         footer_texts.append('<%s|Store Link>' % get_store_link(package_name))
 
         # Use Google Translation.
-        google_translation_link = get_google_translation_link('auto', 'en', self.get_user_comment())
+        google_translation_link = get_google_translation_link('auto', 'en', self.get_user_comment().encode('utf8'))
         footer_texts.append('<%s|Google Translation>' % google_translation_link)
 
         # App version code and version name.    
