@@ -133,6 +133,7 @@ class Command:
 
     def execute(self, params):
         if len(self.__params) != len(params):
+            # print 'command = %s found %s' % (self.__params, params)
             return False
 
         i = 0
@@ -146,21 +147,23 @@ class Command:
                 i = i + 1
                 continue
 
-            if __params == '%s':
+            if __param == '%s':
                 # Expect a string.
-                placeholders.append(params)
+                placeholders.append(param)
                 i = i + 1
                 continue
 
-            if __params == '%d':
+            if __param == '%d':
                 # Expect an integer.
-                if not params.isdigit():
+                if not param.isdigit():
+                    # print 'command = %s expected an integer found %s' % (self.__params, param)
                     return False
 
-                placeholders.append(params)
+                placeholders.append(param)
                 i = i + 1
                 continue
 
+            # print 'command = %s expected %s found %s' % (self.__params, __param, param)
             # Not matched.
             return False
 
@@ -219,10 +222,10 @@ class Review:
         return self.__get_user_comment_object()['starRating']
 
     def get_star_repr(self):
-        return parse_stars(self.__get_star_rating())
+        return parse_stars(self.get_star_rating())
 
     def get_color(self):
-        return color_for_stars(self.__get_star_rating())
+        return color_for_stars(self.get_star_rating())
 
     def __create_user_callback_id(self, package_name):
         return create_callback_id(self.get_review_id(), package_name, 'user')
@@ -278,11 +281,11 @@ class Review:
         author_texts = []
 
         # User's name.
-        if author_name != None and len(author_name) > 0:
-            author_texts.append(author_name)
+        if self.get_author_name() != None and len(self.get_author_name()) > 0:
+            author_texts.append(self.get_author_name())
 
         # User's country.
-        author_texts.append(country_name)
+        author_texts.append(self.get_user_country())
 
         attachment['author_name'] = u' · '.join(author_texts)
 
@@ -640,7 +643,7 @@ def handle_message_menu(params, response, service):
     })
 
 def filter_reviews(reviews, seconds_since_epoch):
-    return [review for review in reviews if get_user_last_modifier(review) > seconds_since_epoch]
+    return [review for review in reviews if Review(review).get_user_last_modified() > seconds_since_epoch]
 
 def fetch_reviews(service, package_name, max_results):
     try:
@@ -648,10 +651,35 @@ def fetch_reviews(service, package_name, max_results):
             packageName=package_name,
             maxResults=max_results
         ).execute()
-        return reviews
+        return reviews['reviews']
 
     except Exception as e:
         return None
+
+def create_attachments(reviews, package_name):
+    attachments = []
+
+    # Slow!
+    # image_url = get_cover_image_url(read_source(get_store_link(package_name)))
+
+    for __review in reviews:
+        review = Review(__review)
+        attachment = review.format_user_comment(package_name)
+
+        add_translate_button(attachment)
+        add_reply_button(attachment)
+
+        # Add a footer icon if any.
+        # if image_url != None:
+        #    attachment['footer_icon'] = image_url
+
+        attachments.append(attachment)
+
+        if review.has_developer_comment():
+            attachments.append(review.format_developer_comment(package_name))
+
+    return attachments
+
 
 def help(response):
     response['text'] = (
@@ -666,8 +694,38 @@ def help(response):
     )    
     response['mrkdwn_in'] = ['text']
 
-def show(response):
-    pass
+def attach_reviews_to_response(response, reviews, package_name):
+    attachments = create_attachments(reviews, package_name)
+    response['attachments'] = attachments
+    review_count = len(reviews)
+
+    if review_count == 0:
+        response['text'] = 'There is not any review for %s' % package_name
+    elif review_count == 1:
+        response['text'] = 'There is a review for %s' % package_name
+    else:
+        response['text'] = 'There are %d reviews for %s' % (review_count, package_name)
+
+def show(response, service, config, package_name, max_results, seconds_since_epoch):
+    print max_results
+    reviews = fetch_reviews(service, package_name, max_results)
+    if reviews == None:
+        return
+
+    print json.dumps(reviews, indent=2)
+
+    reviews = filter_reviews(reviews, seconds_since_epoch)
+    attach_reviews_to_response(response, reviews, package_name)
+
+    response['response_type'] = 'in_channel'
+
+def show_with_auto_mode(response, service, config, package_name, max_result, seconds_since_epoch):
+    show(response, service, config, package_name, max_result, seconds_since_epoch)
+    config.set_auto_time_point(package_name, get_seconds_since_epoch())
+
+def show_with_manual_mode(response, service, config, package_name, max_result, seconds_since_epoch):
+    show(response, service, config, package_name, max_result, seconds_since_epoch)
+    config.set_manual_time_point(package_name, get_seconds_since_epoch())
 
 def handle_command(params, response, service, config):
     user_id         = params['user_id']
@@ -691,10 +749,25 @@ def handle_command(params, response, service, config):
         pass
 
     commands = []
-    commands.append(Command(signature='help',       callback=lambda:help(response)))
-    commands.append(Command(signature='auto %s',    callback=__auto))
-    commands.append(Command(signature='manual %s',  callback=__manual))
-    commands.append(Command(signature='show %d %s', callback=show))
+    commands.append(Command(
+        signature='help',
+        callback=lambda:help(response)
+    ))
+    commands.append(Command(
+        signature='auto %s',
+        callback=lambda package_name:
+            show_with_auto_mode(response, service, config, package_name, 20, config.get_auto_time_point(package_name))
+    ))
+    commands.append(Command(
+        signature='manual %s',
+        callback=lambda package_name:
+            show_with_manual_mode(response, service, config, package_name, 20, config.get_manual_time_point(package_name))
+    ))
+    commands.append(Command(
+        signature='show %d %s',
+        callback=lambda max_result, package_name:
+            show(response, service, config, package_name, min(int(max_result), 20), 0),
+    ))
 
     params = text.split(' ')
     print 'params = %s' % params
@@ -705,44 +778,8 @@ def handle_command(params, response, service, config):
             succeeded = True
             break
 
-    # if sub_command == 'manual' or sub_command == 'auto' or sub_command.isdigit():
-    #     # Limit to 50 results only or there will be timeout.
-    #     max_results = 50
-    #     if sub_command.isdigit():
-    #         max_results = min(max_results, int(sub_command))
-
-    #     response['response_type'] = 'in_channel'
-
-    #     if succeeded:
-    #         attachments = []
-    #         reviews = reviews_page['reviews']
-
-    #         print 'review_count = %d' % len(reviews)
-
-    #         # Slow!
-    #         # image_url = get_cover_image_url(read_source(get_store_link(package_name)))
-
-    #         for review in reviews:
-    #             attachment = format_user_comment(review, package_name)
-
-    #             add_translate_button(attachment)
-    #             add_reply_button(attachment)
-
-    #             # Add a footer icon if any.
-    #             # if image_url != None:
-    #             #    attachment['footer_icon'] = image_url
-
-    #             attachments.append(attachment)
-
-    #             dev_attachment = format_developer_comment(review, package_name)
-    #             if dev_attachment != None:
-    #                 attachments.append(dev_attachment)
-
-    #         response['attachments'] = attachments
-
-    #         review_count = len(reviews)
-    #         response['text'] = 'There are %d reviews for %s' % (review_count, package_name)
-    #         config.set_manual_time_point(package_name, get_seconds_since_epoch())
+    if not succeeded:
+        response['text'] = 'Invalid command'
 
 # https://gist.github.com/bradmontgomery/2219997
 # https://stackoverflow.com/questions/21631799/how-can-i-pass-parameters-to-a-requesthandler
