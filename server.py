@@ -123,6 +123,207 @@ class Config:
         Config.__append_unique(self.get_package_list(), package_name)
         self.write_config_data()
 
+class Command:
+    __params = None
+    __callback = None
+
+    def __init__(self, signature, callback):
+        self.__params = signature.split(' ')
+        self.__callback = callback
+
+    def execute(self, params):
+        if len(self.__params) != len(params):
+            return False
+
+        i = 0
+        placeholders = []
+        while i < len(params):
+            __param = self.__params[i]
+            param = params[i]
+
+            if __param == param:
+                # Matched.
+                i = i + 1
+                continue
+
+            if __params == '%s':
+                # Expect a string.
+                placeholders.append(params)
+                i = i + 1
+                continue
+
+            if __params == '%d':
+                # Expect an integer.
+                if not params.isdigit():
+                    return False
+
+                placeholders.append(params)
+                i = i + 1
+                continue
+
+            # Not matched.
+            return False
+
+        self.__callback(*placeholders)
+        return True
+
+class Review:
+    __review = None
+
+    # Initializes the review wrapper with the specified review.
+    def __init__(self, review):
+        self.__review = review
+
+    # Gets the author's name.
+    # Nullable.
+    def get_author_name(self):
+        return self.__review.get('authorName', None)
+
+    # Gets the review ID.
+    def get_review_id(self):
+        return self.__review['reviewId']
+
+    def __get_user_comment_object(self):
+        return self.__review['comments'][0]['userComment']
+
+    # Gets the user's comment, including title and body text separated by a tab character.
+    def get_user_comment(self):
+        return self.__get_user_comment_object()['text']
+
+    # Gets the user's comment as a tuple of title text and body text.
+    def get_user_comment_split(self):
+        return split_comment(self.get_user_comment())
+
+    # Gets the review's application version, including version name and version code.
+    def get_app_version(self):
+        app_version_code = self.__get_user_comment_object().get('appVersionCode', None)
+        app_version_name = self.__get_user_comment_object().get('appVersionName', None)
+
+        if app_version_code == None:
+            return None
+        return 'v%s (%s)' % (app_version_name, app_version_code)
+
+    def __get_reviewer_language(self):
+        return self.__get_user_comment_object()['reviewerLanguage']
+
+    # Gets the reviewer's country.
+    def get_user_country(self):
+        language_code, country_code = self.__get_reviewer_language().split('_')
+        country_name = pycountry.countries.get(alpha_2=country_code).name
+        return country_name
+
+    def get_user_last_modified(self):
+        return self.__get_user_comment_object()['lastModified']['seconds']
+
+    def get_star_rating(self):
+        return self.__get_user_comment_object()['starRating']
+
+    def get_star_repr(self):
+        return parse_stars(self.__get_star_rating())
+
+    def get_color(self):
+        return color_for_stars(self.__get_star_rating())
+
+    def __create_user_callback_id(self, package_name):
+        return create_callback_id(self.get_review_id(), package_name, 'user')
+
+    def __create_developer_callback_id(self, package_name):
+        return create_callback_id(self.get_review_id(), package_name, 'developer')
+
+    def has_developer_comment(self):
+        return len(self.__review['comments']) == 2
+
+    def __get_developer_comment_object(self):
+        if not self.has_developer_comment():
+            return None
+
+        return self.__review['comments'][1]['developerComment']
+
+    def get_developer_comment(self):
+        if not self.has_developer_comment():
+            return None
+
+        return self.__get_developer_comment_object()['text']
+
+    def get_developer_last_modified(self):
+        if not self.has_developer_comment():
+            return 0
+
+        return self.__get_developer_comment_object()['lastModified']['seconds']
+
+    # Sample:
+    # Author · Viet Name
+    # ★★★★☆
+    # this is my comment
+    # v1.0.1 (1111) | May 31, 2017 at 9:59 AM
+    # @param review The review information retrieved from androidpublisher.
+    # @return A formatted dictionary.
+    def format_user_comment(self, package_name):
+        attachment = {}
+        attachment['title']         = self.get_star_repr()
+        attachment['ts']            = self.get_user_last_modified()
+        attachment['color']         = self.get_color()
+        attachment['mrkdwn_in']     = ['text']
+        attachment['callback_id']   = self.__create_user_callback_id(package_name)
+
+        # https://api.slack.com/docs/message-attachments
+        comment_title, comment_body = self.get_user_comment_split()
+        attachment['fields'] = [{
+            'title': comment_title,
+            'value': comment_body,
+            'short': True
+        }]
+
+        # Header.
+        author_texts = []
+
+        # User's name.
+        if author_name != None and len(author_name) > 0:
+            author_texts.append(author_name)
+
+        # User's country.
+        author_texts.append(country_name)
+
+        attachment['author_name'] = u' · '.join(author_texts)
+
+        # Footer.
+        footer_texts = []
+
+        # Package name.
+        footer_texts.append(package_name)
+
+        # Store link.
+        footer_texts.append('<%s|Store Link>' % get_store_link(package_name))
+
+        # Use Google Translation.
+        google_translation_link = get_google_translation_link('auto', 'en', self.get_user_comment())
+        footer_texts.append('<%s|Google Translation>' % google_translation_link)
+
+        # App version code and version name.    
+        if self.get_app_version() != None:
+            footer_texts.append(self.get_app_version())
+
+        attachment['footer'] = u' · '.join(footer_texts)
+
+        # Buttons.
+        attachment['actions'] = []
+
+        return attachment
+
+    def format_developer_comment(self, package_name):
+        if not self.has_developer_comment():
+            return None
+
+        attachment = {}
+        attachment['title']         = 'Reply'
+        attachment['text']          = self.get_developer_comment()
+        attachment['ts']            = self.get_developer_last_modified()
+        attachment['color']         = self.get_color()
+        attachment['mrkdwn_in']     = ['text']
+        attachment['callback_id']   = self.__create_developer_callback_id(package_name)
+
+        return attachment
+
 # Gets the Google Play Store app link.
 # @param package_name The package name of the application.
 # @return The URL link to store.
@@ -189,6 +390,10 @@ def color_for_stars(star_count):
     colors[5] = '#880000'
     return colors[star_count]
 
+def split_comment(comment):
+    title, body = comment.split('\t', 1)
+    return title, body
+
 # Convert seconds to text.
 # Sample: May 31, 2017 at 9:59 AM.
 def parse_time_point(seconds_since_epoch):
@@ -220,133 +425,6 @@ def parse_callback_id(callback_id):
     review_id, package_name, tag = callback_id.split('|')
     return review_id, package_name, tag
 
-# Format the specified review.
-# Sample:
-# Author · Viet Name
-# ★★★★☆
-# this is my comment
-# v1.0.1 (1111) | May 31, 2017 at 9:59 AM
-# @param review The review information retrieved from androidpublisher.
-# @return A formatted dictionary.
-def format_user_comment(review, package_name):
-    author_name         = review.get('authorName', None)
-    review_id           = review['reviewId']
-    user_comment        = review['comments'][0]['userComment']
-    app_version_code    = user_comment.get('appVersionCode', None)
-    app_version_name    = user_comment.get('appVersionName', None)
-    reviewer_language   = user_comment['reviewerLanguage']
-    last_modified       = user_comment['lastModified']['seconds']
-
-    star_rating = get_star_rating(review)
-
-    language_code, country_code = reviewer_language.split('_')
-    country_name = pycountry.countries.get(alpha_2=country_code).name
-
-    attachment = {}
-
-    attachment['title']         = parse_stars(star_rating)
-    attachment['ts']            = last_modified
-    attachment['color']         = color_for_stars(star_rating)
-    attachment['mrkdwn_in']     = ['text']
-
-    # https://api.slack.com/docs/message-attachments
-    comment_title, comment_body = split_comment(get_user_comment(review))
-    attachment['fields'] = [{
-        'title': comment_title,
-        'value': comment_body,
-        'short': True
-    }]
-
-    # Callback ID contains both package name and review ID.
-    attachment['callback_id']   = create_callback_id(review_id, package_name, 'user')
-
-    # Header.
-    author_texts = []
-
-    # User's name.
-    if author_name != None and len(author_name) > 0:
-        author_texts.append(author_name)
-
-    # User's country.
-    author_texts.append(country_name)
-
-    attachment['author_name'] = u' · '.join(author_texts)
-
-    # Footer.
-    footer_texts = []
-
-    # Package name.
-    footer_texts.append(package_name)
-
-    # Store link.
-    footer_texts.append('<%s|Store Link>' % get_store_link(package_name))
-
-    # Use Google Translation.
-    google_translation_link = get_google_translation_link('auto', 'en', get_user_comment(review))
-    footer_texts.append('<%s|Google Translation>' % google_translation_link)
-
-    # App version code and version name.    
-    if app_version_name != None:
-        footer_texts.append('v%s (%s)' % (app_version_name, app_version_code))
-
-    attachment['footer'] = u' · '.join(footer_texts)
-
-    # Buttons.
-    attachment['actions'] = []
-
-    return attachment
-
-def format_developer_comment(review, package_name):
-    comment = get_developer_comment_object(review)
-    if comment == None:
-        return None
-    text                = comment['text']
-    last_modified       = comment['lastModified']['seconds']
-    review_id           = review['reviewId']
-
-    star_rating = get_star_rating(review)
-
-    attachment = {}
-    attachment['title']         = 'Reply'
-    attachment['text']          = text
-    attachment['ts']            = last_modified
-    attachment['color']         = color_for_stars(star_rating)
-    attachment['mrkdwn_in']     = ['text']
-    attachment['callback_id']   = create_callback_id(review_id, package_name, 'developer')
-
-    return attachment
-
-def get_user_comment_object(review):
-    return review['comments'][0]['userComment']
-
-def get_user_comment(review):
-    return get_user_comment_object(review)['text']
-
-def get_user_last_modifier(review):
-    return get_user_comment_object(review)['lastModified']['seconds']
-
-def get_developer_comment_object(review):
-    comments = review['comments']
-    comment_count = len(comments)
-    if comment_count < 2:
-        return None
-
-    return comments[1]['developerComment']
-
-def get_developer_comment(review):
-    comment = get_developer_comment_object(review)
-    if comment == None:
-        return None
-
-    return comment['text']
-
-def split_comment(comment):
-    title, body = comment.split('\t', 1)
-    return title, body
-
-def get_star_rating(review):
-    return review['comments'][0]['userComment']['starRating']
-
 def add_translate_button(attachment):
     # Translate (to English) button.
     translate_button = {}
@@ -371,14 +449,16 @@ def add_reply_button(attachment):
 
 def handle_translate_button(review_id, package_name, original_attachments, service):
     # Translate button.
-    review = service.reviews().get(
+    __review = service.reviews().get(
         packageName=package_name, 
         reviewId=review_id,
         translationLanguage='en_US'
     ).execute()
 
+    review = Review(__review)
+
     user_callback_id = create_callback_id(review_id, package_name, 'user')
-    comment_title, comment_body = split_comment(get_user_comment(review))
+    comment_title, comment_body = review.get_user_comment_split()
 
     attachments = []
     for original_attachment in original_attachments:
@@ -559,18 +639,35 @@ def handle_message_menu(params, response, service):
         'value' : 'reply_5'
     })
 
-def handle_help_command(response):
+def filter_reviews(reviews, seconds_since_epoch):
+    return [review for review in reviews if get_user_last_modifier(review) > seconds_since_epoch]
+
+def fetch_reviews(service, package_name, max_results):
+    try:
+        reviews = service.reviews().list(
+            packageName=package_name,
+            maxResults=max_results
+        ).execute()
+        return reviews
+
+    except Exception as e:
+        return None
+
+def help(response):
     response['text'] = (
         '`/reviews help` - Display this text\n'
         '`/reviews [package name]` - Alias for `/reviews auto [package name]`\n'
-        '`/reviews auto [package name]` - Display all reviews since the last auto reviews call\n'
-        '`/reviews manual [package name]` - Display all reviews since the last manual reviews call\n'
-        '`/reviews [number] [package name]` - Display the newest `number` reviews'
-    )
+        '`/reviews auto [package name]` - Display all newest reviews since the last _automatic_ call by bot, upto 20 reviews\n'
+        '`/reviews manual [package name]` - Display all reviews since the last _manual_ call by user, upto 20 reviews\n'
+        '`/reviews show [number] [package name]` - Display the newest `number` reviews, upto 20 reviews\n'
+        '`/reviews package list` - Display registered application packages for automatic call\n'
+        '`/reviews package add [package name]` - Add an application package to automatic call\n'
+        '`/reviews package remove [package name]` - Remove an application package form automatic call'
+    )    
     response['mrkdwn_in'] = ['text']
 
-def filter_reviews(reviews, seconds_since_epoch):
-    return [review for review in reviews if get_user_last_modifier(review) > seconds_since_epoch]
+def show(response):
+    pass
 
 def handle_command(params, response, service, config):
     user_id         = params['user_id']
@@ -587,77 +684,65 @@ def handle_command(params, response, service, config):
     if command != '/reviews':
         return
 
-    # Default sub-command is `auto`.
-    sub_command = None
-    package_name = None
+    def __auto(package_name):
+        pass
 
-    # Format: /reviews sub_command package_name
-    if text == 'help':
-        sub_command = 'help'
-    elif text.find(' ') == -1:
-        sub_command = 'auto'
-        package_name = text
-    else:
-        sub_command, package_name = text.split(' ')
+    def __manual(package_name):
+        pass
 
-    print 'sub_command = %s package_name = %s' % (sub_command, package_name)
+    commands = []
+    commands.append(Command(signature='help',       callback=lambda:help(response)))
+    commands.append(Command(signature='auto %s',    callback=__auto))
+    commands.append(Command(signature='manual %s',  callback=__manual))
+    commands.append(Command(signature='show %d %s', callback=show))
 
-    if sub_command == 'help':
-        handle_help_command(response)
-        return
+    params = text.split(' ')
+    print 'params = %s' % params
 
-    if sub_command == 'manual' or sub_command == 'auto' or sub_command.isdigit():
-        # Limit to 50 results only or there will be timeout.
-        max_results = 50
-        if sub_command.isdigit():
-            max_results = min(max_results, int(sub_command))
-
-        response['response_type'] = 'in_channel'
-
-        succeeded = False
-        reviews_resources = service.reviews()
-        try:
-            reviews_page = reviews_resources.list(
-                packageName=package_name,
-                maxResults=max_results
-            ).execute()
+    succeeded = False
+    for command in commands:
+        if command.execute(params):
             succeeded = True
-        except Exception as e:
-            reviews_page = None
-            response['text'] = str(e)
+            break
 
-        print json.dumps(reviews_page, indent=4)
+    # if sub_command == 'manual' or sub_command == 'auto' or sub_command.isdigit():
+    #     # Limit to 50 results only or there will be timeout.
+    #     max_results = 50
+    #     if sub_command.isdigit():
+    #         max_results = min(max_results, int(sub_command))
 
-        if succeeded:
-            attachments = []
-            reviews = reviews_page['reviews']
+    #     response['response_type'] = 'in_channel'
 
-            print 'review_count = %d' % len(reviews)
+    #     if succeeded:
+    #         attachments = []
+    #         reviews = reviews_page['reviews']
 
-            # Slow!
-            # image_url = get_cover_image_url(read_source(get_store_link(package_name)))
+    #         print 'review_count = %d' % len(reviews)
 
-            for review in reviews:
-                attachment = format_user_comment(review, package_name)
+    #         # Slow!
+    #         # image_url = get_cover_image_url(read_source(get_store_link(package_name)))
 
-                add_translate_button(attachment)
-                add_reply_button(attachment)
+    #         for review in reviews:
+    #             attachment = format_user_comment(review, package_name)
 
-                # Add a footer icon if any.
-                # if image_url != None:
-                #    attachment['footer_icon'] = image_url
+    #             add_translate_button(attachment)
+    #             add_reply_button(attachment)
 
-                attachments.append(attachment)
+    #             # Add a footer icon if any.
+    #             # if image_url != None:
+    #             #    attachment['footer_icon'] = image_url
 
-                dev_attachment = format_developer_comment(review, package_name)
-                if dev_attachment != None:
-                    attachments.append(dev_attachment)
+    #             attachments.append(attachment)
 
-            response['attachments'] = attachments
+    #             dev_attachment = format_developer_comment(review, package_name)
+    #             if dev_attachment != None:
+    #                 attachments.append(dev_attachment)
 
-            review_count = len(reviews)
-            response['text'] = 'There are %d reviews for %s' % (review_count, package_name)
-            config.set_manual_time_point(package_name, get_seconds_since_epoch())
+    #         response['attachments'] = attachments
+
+    #         review_count = len(reviews)
+    #         response['text'] = 'There are %d reviews for %s' % (review_count, package_name)
+    #         config.set_manual_time_point(package_name, get_seconds_since_epoch())
 
 # https://gist.github.com/bradmontgomery/2219997
 # https://stackoverflow.com/questions/21631799/how-can-i-pass-parameters-to-a-requesthandler
