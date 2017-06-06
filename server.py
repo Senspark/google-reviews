@@ -232,8 +232,11 @@ class Review:
         country_name = pycountry.countries.get(alpha_2=country_code).name
         return country_name
 
-    def get_user_last_modified(self):
+    def __get_user_last_modified_string(self):
         return self.__get_user_comment_object()['lastModified']['seconds']
+
+    def get_user_last_modified(self):
+        return int(self.__get_user_last_modified_string())
 
     def get_star_rating(self):
         return self.__get_user_comment_object()['starRating']
