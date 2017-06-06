@@ -23,7 +23,8 @@ import urlparse
 
 DEFAULT_HTTP_PORT = 52000
 DEFAULT_REFRESH_INTERVAL = 86400 # Seconds.
-JSON_FILE = 'GooglePlayCustomerService-ae3d674c4880.json'
+JSON_FILE = 'GooglePlayCustomerService-ae3d674c4880.json' # Use your JSON.
+WEBHOOK_URL = 'https://hooks.slack.com/services/T05______/B5N______/u7i_____________________' # Use your webhook url.
 PACKAGE_LIST = [
     'com.senspark.shootdinosaureggs2',
     'com.senspark.goldminerclassic',
