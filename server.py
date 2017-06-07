@@ -573,6 +573,9 @@ def handle_message_button(params, response, service):
 
     original_attachments = original_message['attachments']
 
+    # Keep `text` field.
+    response['text'] = original_message.get('text', '')
+
     if action_name == 'translate':
         # Translate button.
         attachments = handle_translate_button(review_id, package_name, original_attachments, service)
