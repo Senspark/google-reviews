@@ -739,7 +739,7 @@ def show_help(response):
         '`/reviews package list` - Display registered application packages for automatic call\n'
         '`/reviews package add [package name]` - Add an application package to automatic call\n'
         '`/reviews package remove [package name]` - Remove an application package form automatic call\n'
-        '`/reviews refresh interval [seconds]` - Set the refresh interval in seconds\n'
+        '`/reviews refresh interval [seconds]` - Set the refresh interval in seconds, should be larger than 60 seconds\n'
         '`/reviews refresh schedule [seconds since now]` - Reset the next refresh to be the specified time point\n'
         '`/reviews refresh info` - Print the refresh interval and next scheduled refresh time'
     )    
@@ -892,7 +892,7 @@ def handle_command(params, response, service, config):
     commands.append(Command(
         signature='refresh interval %d',
         callback=lambda seconds:
-            set_refresh_interval(response, config, int(seconds))
+            set_refresh_interval(response, config, max(int(seconds), 60))
     ))
     commands.append(Command(
         signature='refresh schedule %d',
