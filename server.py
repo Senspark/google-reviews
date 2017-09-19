@@ -432,11 +432,11 @@ def parse_stars(star_count):
 # @return Color in hex format.
 def color_for_stars(star_count):
     colors = {}
-    colors[1] = '#ffdddd'
-    colors[2] = '#eebbbb'
-    colors[3] = '#dd8888'
-    colors[4] = '#cc4444'
-    colors[5] = '#880000'
+    colors[1] = '#ff8b5a' # 255 139 90
+    colors[2] = '#ffb234' # 255 178 52
+    colors[3] = '#ffd834' # 255 216 52
+    colors[4] = '#add632' # 173 214 50
+    colors[5] = '#9fc05a' # 159 192 90
     return colors[star_count]
 
 def split_comment(comment):
