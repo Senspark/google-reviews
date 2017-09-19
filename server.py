@@ -252,6 +252,8 @@ class Review:
     # Gets the reviewer's country.
     def get_user_country(self):
         language_code, country_code = self.__get_reviewer_language().split('_')
+        if 'ZZ' in country_code:
+            return 'Unknown or Invalid Territory'
         country_name = pycountry.countries.get(alpha_2=country_code).name
         return country_name
 
